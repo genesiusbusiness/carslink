@@ -31,21 +31,9 @@ export function RadixClassNameFix() {
           const classAttr = this.getAttribute('class')
           return typeof classAttr === 'string' ? classAttr : ''
         },
-        set: function(value) {
-          // Convertir en chaîne si nécessaire
-          const stringValue = value === null || value === undefined 
-            ? '' 
-            : (typeof value === 'string' ? value : String(value))
-          
-          // Utiliser le setter original ou setAttribute
-          if (originalDescriptor.set) {
-            originalDescriptor.set.call(this, stringValue)
-          } else {
-            this.setAttribute('class', stringValue)
-          }
-        },
+        set: originalDescriptor.set,
         configurable: true,
-        enumerable: true
+        enumerable: true,
       })
     } else {
       // Fallback : créer une propriété si elle n'existe pas
@@ -54,14 +42,11 @@ export function RadixClassNameFix() {
           const classAttr = this.getAttribute('class')
           return typeof classAttr === 'string' ? classAttr : ''
         },
-        set: function(value) {
-          const stringValue = value === null || value === undefined 
-            ? '' 
-            : (typeof value === 'string' ? value : String(value))
-          this.setAttribute('class', stringValue)
+        set: function(value: string) {
+          this.setAttribute('class', value || '')
         },
         configurable: true,
-        enumerable: true
+        enumerable: true,
       })
     }
 

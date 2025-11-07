@@ -47,20 +47,18 @@ export default function FacturesPage() {
         .order("created_at", { ascending: false })
 
       if (error) {
-        console.error("Error loading invoices:", error)
         toast({
           title: "Erreur",
-          description: "Impossible de charger les factures",
+          description: "Erreur lors du chargement des factures",
           variant: "destructive",
         })
       } else if (data) {
         setInvoices(data)
       }
     } catch (error: any) {
-      console.error("Error loading invoices:", error)
       toast({
         title: "Erreur",
-        description: error.message || "Une erreur est survenue",
+        description: "Erreur lors du chargement des factures",
         variant: "destructive",
       })
     } finally {
@@ -80,11 +78,11 @@ export default function FacturesPage() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "paid":
-        return <CheckCircle className="h-4 w-4 text-green-600" />
+        return (<CheckCircle className="h-4 w-4 text-green-600" />)
       case "pending":
-        return <Clock className="h-4 w-4 text-yellow-600" />
+        return (<Clock className="h-4 w-4 text-yellow-600" />)
       case "refunded":
-        return <XCircle className="h-4 w-4 text-red-600" />
+        return (<XCircle className="h-4 w-4 text-red-600" />)
       default:
         return null
     }
@@ -122,11 +120,11 @@ export default function FacturesPage() {
 
   return (
     <>
-      <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-20 safe-area-top safe-area-bottom">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
         {/* Mobile Container avec effet Liquid Glass */}
-        <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto">
+        <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-28 sm:pb-32">
           {/* Header avec verre givré */}
-          <div className="px-6 py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
+          <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
             <div className="flex items-center gap-4 mb-6">
               <Button
                 variant="ghost"
@@ -145,7 +143,7 @@ export default function FacturesPage() {
           </div>
 
           {/* Contenu */}
-          <div className="px-6 py-6 bg-white/30 backdrop-blur-sm">
+          <div className="px-4 sm:px-6 py-6 sm:py-8 pb-28 sm:pb-32 bg-white/30 backdrop-blur-sm">
           {invoices.length > 0 ? (
             <div className="space-y-3">
               {invoices.map((invoice) => (
@@ -168,12 +166,12 @@ export default function FacturesPage() {
                             </h3>
                           </div>
                           <div className="text-sm text-gray-500 font-light">
-                            {formatDate(invoice.created_at)}
+                            {invoice.created_at ? formatDate(invoice.created_at) : 'N/A'}
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <div className="text-lg font-light text-gray-900">
-                            {formatCurrency(invoice.total_amount)}
+                            {invoice.total_amount ? formatCurrency(invoice.total_amount) : 'N/A'}
                           </div>
                           <Badge
                             variant={
@@ -185,8 +183,8 @@ export default function FacturesPage() {
                             }
                             className="flex items-center gap-1"
                           >
-                            {getStatusIcon(invoice.status)}
-                            {getStatusLabel(invoice.status)}
+                            {invoice.status && getStatusIcon(invoice.status)}
+                            {invoice.status && getStatusLabel(invoice.status)}
                           </Badge>
                         </div>
                       </div>

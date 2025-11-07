@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { User, Car, Settings, LogOut, Plus, Trash2, Edit, FileText, History, HelpCircle } from "lucide-react"
+import { User, Car, Settings, LogOut, Plus, Trash2, Edit, FileText, History, HelpCircle, BookOpen } from "lucide-react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -64,10 +64,9 @@ export default function ProfilePage() {
         setVehicles(vehiclesData)
       }
     } catch (error) {
-      console.error("Error loading data:", error)
       toast({
         title: "Erreur",
-        description: "Impossible de charger les données du profil",
+        description: "Erreur lors du chargement des données",
         variant: "destructive",
       })
     } finally {
@@ -109,7 +108,7 @@ export default function ProfilePage() {
 
       showElegantToast({
         title: "Véhicule supprimé",
-        message: `${vehicleToDelete.brand} ${vehicleToDelete.model} a été supprimé avec succès.`,
+        message: "Le véhicule a été supprimé avec succès",
         variant: "success",
       })
 
@@ -119,7 +118,7 @@ export default function ProfilePage() {
     } catch (error: any) {
       showElegantToast({
         title: "Erreur",
-        message: error.message || "Une erreur est survenue lors de la suppression",
+        message: error.message || "Erreur lors de la suppression",
         variant: "error",
       })
     }
@@ -148,77 +147,109 @@ export default function ProfilePage() {
 
   return (
     <>
-      <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-32 safe-area-top safe-area-bottom">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-32 sm:pb-40 safe-area-top safe-area-bottom">
       {/* Mobile Container avec effet Liquid Glass */}
-      <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto pb-32">
-        <div className="px-6 py-6 pb-8">
-          {/* Profile Header */}
-          <div className="relative mb-6">
+      <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-32 sm:pb-40">
+        <div className="px-4 sm:px-6 py-6 sm:py-8 pb-8 sm:pb-12">
+          {/* Profile Header - Responsive */}
+          <div className="relative mb-6 sm:mb-8">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/10 to-blue-500/20 rounded-2xl blur-xl opacity-50" />
-            <div className="relative bg-white/60 backdrop-blur-xl border border-white/40 rounded-2xl p-6 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-              <div className="flex items-center gap-4">
-                <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-lg">
-                  <User className="h-8 w-8 text-white" />
+            <div className="relative bg-white/60 backdrop-blur-xl border border-white/40 rounded-2xl p-5 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
+                  <User className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
                 </div>
-                <div className="flex-1">
-                  <h2 className="text-xl font-light text-gray-900">{displayName}</h2>
-                  <p className="text-sm text-gray-500 font-light">{user?.email || ""}</p>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-lg sm:text-xl font-light text-gray-900 truncate">{displayName}</h2>
+                  <p className="text-xs sm:text-sm text-gray-500 font-light truncate">{user?.email || ""}</p>
                   {profile?.phone && (
-                    <p className="text-sm text-gray-500 font-light">{profile.phone}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 font-light">{profile.phone}</p>
                   )}
                 </div>
               </div>
             </div>
           </div>
 
-        {/* Vehicles */}
-        <Card className="mb-4">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Mes véhicules</CardTitle>
-                <CardDescription>
+        {/* Vehicles - Responsive */}
+        <Card className="mb-6 sm:mb-8">
+          <CardHeader className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex-1">
+                <CardTitle className="text-lg sm:text-xl">Mes véhicules</CardTitle>
+                <CardDescription className="text-xs sm:text-sm mt-1">
                   Gérez vos véhicules enregistrés
                 </CardDescription>
               </div>
-              <Button
-                size="sm"
-                type="button"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all rounded-xl"
-                onClick={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  console.log("[Profile] Navigation vers ajout de véhicule")
-                  router.push("/profile/vehicles/new")
-                }}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Ajouter
-              </Button>
+              {vehicles.length > 0 && (
+                <Button
+                  size="sm"
+                  type="button"
+                  className="bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-xl h-9 sm:h-10 text-xs sm:text-sm w-full sm:w-auto font-medium"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    router.push("/profile/vehicles/new")
+                  }}
+                >
+                  <Plus className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-2" />
+                  Ajouter
+                </Button>
+              )}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 sm:p-6">
             {vehicles.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-4 sm:space-y-6">
                 {vehicles.map((vehicle) => (
                   <div
                     key={vehicle.id}
-                    className="group relative bg-white border-2 border-gray-200 rounded-2xl p-5 hover:border-gray-300 hover:shadow-lg hover:shadow-gray-100 transition-all duration-300 transform hover:-translate-y-0.5"
+                    className="group relative bg-white border-2 border-gray-200 rounded-2xl p-4 sm:p-5 hover:border-gray-300 hover:shadow-lg hover:shadow-gray-100 transition-all duration-300 transform hover:-translate-y-0.5"
                   >
-                    <div className="flex items-start gap-4">
+                    <div className="flex items-start gap-3 sm:gap-4">
                       {/* Icône véhicule */}
-                      <div className="flex-shrink-0 h-12 w-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                        <Car className="h-6 w-6 text-white" />
+                      <div className="flex-shrink-0 h-11 w-11 sm:h-12 sm:w-12 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
+                        <Car className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
                       </div>
                       
                       {/* Informations du véhicule */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900 text-base mb-1">
-                              {vehicle.brand} {vehicle.model}
-                            </h3>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+                        <div className="flex items-start justify-between gap-3 mb-2 sm:mb-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+                                {vehicle.brand} {vehicle.model}
+                              </h3>
+                              {/* Boutons d'action dans le header */}
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  type="button"
+                                  className="h-8 w-8 rounded-lg text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 transition-all duration-200"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    const url = `/profile/vehicles/${vehicle.id}`
+                                    router.push(url)
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 rounded-lg text-red-600 hover:text-red-700 hover:bg-red-50 transition-all duration-200"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    handleDeleteClick(vehicle)
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600">
                               {vehicle.license_plate && (
                                 <span className="inline-flex items-center gap-1.5">
                                   <span className="font-mono font-medium bg-gray-100 px-2 py-0.5 rounded">
@@ -242,40 +273,6 @@ export default function ProfilePage() {
                         </div>
                       </div>
                     </div>
-                    
-                    {/* Boutons d'action */}
-                    <div className="mt-4 flex items-center justify-end gap-3 border-t border-gray-100 pt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        className="flex-1 max-w-[150px] h-11 font-medium bg-white hover:bg-gradient-to-r hover:from-blue-50 hover:to-blue-100 hover:border-blue-400 hover:text-blue-700 hover:shadow-md transition-all duration-200 rounded-xl border-2 cursor-pointer active:scale-95"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          console.log("[Profile] Navigation vers édition du véhicule:", vehicle.id)
-                          const url = `/profile/vehicles/${vehicle.id}`
-                          console.log("[Profile] URL:", url)
-                          router.push(url)
-                        }}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Modifier
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 max-w-[150px] h-11 font-medium bg-white hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 hover:border-red-400 hover:text-red-700 hover:shadow-md transition-all duration-200 rounded-xl border-2 cursor-pointer active:scale-95"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          handleDeleteClick(vehicle)
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Supprimer
-                      </Button>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -286,11 +283,10 @@ export default function ProfilePage() {
                 <Button
                   variant="outline"
                   type="button"
-                  className="bg-gradient-to-r from-blue-50 to-purple-50 hover:from-blue-100 hover:to-purple-100 border-2 border-blue-200 hover:border-blue-300 rounded-xl font-medium"
+                  className="bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 hover:shadow-lg transition-all duration-200 rounded-xl font-medium shadow-md"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    console.log("[Profile] Navigation vers ajout de véhicule (vide)")
                     router.push("/profile/vehicles/new")
                   }}
                 >
@@ -302,102 +298,122 @@ export default function ProfilePage() {
           </CardContent>
         </Card>
 
-        {/* Settings */}
-        <Card className="mb-4">
-          <CardHeader>
-            <CardTitle>Paramètres</CardTitle>
+        {/* Settings - Responsive */}
+        <Card className="mb-6 sm:mb-8">
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl">Paramètres</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent className="p-4 sm:p-6 space-y-2 sm:space-y-3">
             <Button
               variant="ghost"
               type="button"
-              className="w-full justify-start h-14 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-blue-200 border-2 border-transparent rounded-xl transition-all font-medium group"
+              className="w-full justify-start h-12 sm:h-14 bg-white/60 backdrop-blur-sm hover:bg-white/90 hover:shadow-md border border-gray-200/50 hover:border-indigo-300 rounded-xl transition-all duration-200 font-medium group"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[Profile] Navigation vers paramètres")
                 router.push("/profile/settings")
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 group-hover:bg-blue-200 transition-colors">
-                  <Settings className="h-4 w-4 text-blue-600" />
+                <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 group-hover:from-blue-600 group-hover:to-blue-700 transition-all shadow-sm">
+                  <Settings className="h-4 w-4 text-white" />
                 </div>
-                <span>Préférences</span>
+                <span className="text-sm sm:text-base text-gray-900">Préférences</span>
               </div>
             </Button>
             <Button
               variant="ghost"
               type="button"
-              className="w-full justify-start h-14 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-blue-200 border-2 border-transparent rounded-xl transition-all font-medium group"
+              className="w-full justify-start h-12 sm:h-14 bg-white/60 backdrop-blur-sm hover:bg-white/90 hover:shadow-md border border-gray-200/50 hover:border-indigo-300 rounded-xl transition-all duration-200 font-medium group"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[Profile] Navigation vers historique")
+                router.push("/profile/maintenance")
+              }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 group-hover:from-indigo-600 group-hover:to-indigo-700 transition-all shadow-sm">
+                  <BookOpen className="h-4 w-4 text-white" />
+                </div>
+                <span className="text-sm sm:text-base text-gray-900">Documentation technique</span>
+              </div>
+            </Button>
+            <Button
+              variant="ghost"
+              type="button"
+              className="w-full justify-start h-12 sm:h-14 bg-white/60 backdrop-blur-sm hover:bg-white/90 hover:shadow-md border border-gray-200/50 hover:border-purple-300 rounded-xl transition-all duration-200 font-medium group"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
                 router.push("/historique")
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-purple-100 group-hover:bg-purple-200 transition-colors">
-                  <History className="h-4 w-4 text-purple-600" />
+                <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 group-hover:from-purple-600 group-hover:to-purple-700 transition-all shadow-sm">
+                  <History className="h-4 w-4 text-white" />
                 </div>
-                <span>Historique</span>
+                <span className="text-sm sm:text-base text-gray-900">Historique</span>
               </div>
             </Button>
             <Button
               variant="ghost"
               type="button"
-              className="w-full justify-start h-14 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-blue-200 border-2 border-transparent rounded-xl transition-all font-medium group"
+              className="w-full justify-start h-12 sm:h-14 bg-white/60 backdrop-blur-sm hover:bg-white/90 hover:shadow-md border border-gray-200/50 hover:border-green-300 rounded-xl transition-all duration-200 font-medium group"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[Profile] Navigation vers factures")
                 router.push("/factures")
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-100 group-hover:bg-green-200 transition-colors">
-                  <FileText className="h-4 w-4 text-green-600" />
+                <div className="p-2 rounded-lg bg-gradient-to-br from-green-500 to-green-600 group-hover:from-green-600 group-hover:to-green-700 transition-all shadow-sm">
+                  <FileText className="h-4 w-4 text-white" />
                 </div>
-                <span>Factures</span>
+                <span className="text-sm sm:text-base text-gray-900">Factures</span>
               </div>
             </Button>
             <Button
               variant="ghost"
               type="button"
-              className="w-full justify-start h-14 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-blue-200 border-2 border-transparent rounded-xl transition-all font-medium group"
+              className="w-full justify-start h-12 sm:h-14 bg-white/60 backdrop-blur-sm hover:bg-white/90 hover:shadow-md border border-gray-200/50 hover:border-orange-300 rounded-xl transition-all duration-200 font-medium group"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
-                console.log("[Profile] Navigation vers support")
                 router.push("/profile/support")
               }}
             >
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-orange-100 group-hover:bg-orange-200 transition-colors">
-                  <HelpCircle className="h-4 w-4 text-orange-600" />
+                <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 group-hover:from-orange-600 group-hover:to-orange-700 transition-all shadow-sm">
+                  <HelpCircle className="h-4 w-4 text-white" />
                 </div>
-                <span>Support</span>
+                <span className="text-sm sm:text-base text-gray-900">Support</span>
               </div>
             </Button>
           </CardContent>
         </Card>
 
-        {/* Logout */}
-        <Button
-          variant="outline"
-          type="button"
-          className="w-full h-12 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl transition-all font-medium"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            console.log("[Profile] Déconnexion...")
-            signOut()
-          }}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Se déconnecter
-        </Button>
+        {/* Logout - Responsive */}
+        <div className="mb-6 sm:mb-8">
+          <Button
+            variant="outline"
+            type="button"
+            className="w-full h-12 sm:h-14 bg-white/60 backdrop-blur-sm hover:bg-gradient-to-br hover:from-red-500 hover:to-red-600 hover:text-white border-2 border-red-200 hover:border-red-500 text-red-600 rounded-xl transition-all duration-200 font-medium text-sm sm:text-base shadow-sm hover:shadow-lg"
+            onClick={async (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              try {
+                await signOut()
+              } catch (error) {
+                console.error("[Profile] Erreur lors de la déconnexion:", error)
+                // Forcer la déconnexion même en cas d'erreur
+                window.location.href = "/login"
+              }
+            }}
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Se déconnecter
+          </Button>
+        </div>
         </div>
         </div>
       </div>
@@ -436,7 +452,7 @@ export default function ProfilePage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteVehicle}
-              className="flex-1 sm:flex-initial bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg hover:shadow-xl transition-all duration-200"
+              className="flex-1 sm:flex-initial bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-xl font-medium"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Supprimer définitivement

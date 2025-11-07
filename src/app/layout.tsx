@@ -8,19 +8,6 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "CarsLink - Votre garage de confiance",
-  description: "Trouvez et réservez facilement un garage pour votre véhicule",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-    viewportFit: "cover",
-  },
-  themeColor: "#ffffff",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-  },
 }
 
 export default function RootLayout({
@@ -31,7 +18,8 @@ export default function RootLayout({
   return (
     <html lang="fr" className="h-full">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=5, user-scalable=yes, viewport-fit=cover" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="theme-color" content="#ffffff" />
@@ -77,19 +65,6 @@ export default function RootLayout({
                         const classAttr = this.getAttribute('class');
                         return typeof classAttr === 'string' ? classAttr : '';
                       },
-                      set: function(value) {
-                        const stringValue = value === null || value === undefined 
-                          ? '' 
-                          : (typeof value === 'string' ? value : String(value));
-                        if (originalSet) {
-                          originalSet.call(this, stringValue);
-                        } else {
-                          this.setAttribute('class', stringValue);
-                        }
-                      },
-                      configurable: true,
-                      enumerable: true
-                    });
                   }
                 }
                 

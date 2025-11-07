@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { getCurrentFlyAccount, checkRole } from '@/lib/utils-flynesis'
+// import { checkRole } from '@/lib/utils-flynesis' // TODO: Implement checkRole
 import type { User } from '@supabase/supabase-js'
-import type { FlyAccount } from '@/lib/supabaseClient'
+import type { FlyAccount } from '@/lib/types/database'
 
 // Hook pour obtenir l'utilisateur actuel
 export function useUser() {
@@ -35,8 +35,9 @@ export function useFlyAccount() {
 
   useEffect(() => {
     async function fetchAccount() {
-      const acc = await getCurrentFlyAccount()
-      setAccount(acc)
+      // TODO: Implement getCurrentFlyAccount
+      // const acc = await getCurrentFlyAccount()
+      // setAccount(acc)
       setLoading(false)
     }
 
@@ -57,10 +58,11 @@ export function useRole(
 
   useEffect(() => {
     async function check() {
-      const result = await checkRole(requiredRoles)
-      setAuthorized(result.authorized)
-      setAccount(result.account)
-      setError(result.error)
+      // TODO: Implement checkRole
+      // const result = await checkRole(requiredRoles)
+      // setAuthorized(result.authorized)
+      // setAccount(result.account)
+      // setError(result.error)
       setLoading(false)
     }
 

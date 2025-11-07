@@ -28,11 +28,11 @@ export default function EditVehiclePage() {
     model: "",
     year: "",
     license_plate: "",
-    vin: "",
-    color: "",
     mileage: "",
     fuel_type: "",
-    vehicle_type: "voiture",
+    vehicle_type: "",
+    vin: "",
+    color: "",
   })
 
   useEffect(() => {
@@ -47,10 +47,9 @@ export default function EditVehiclePage() {
     }
 
     if (!vehicleId) {
-      console.error("[EditVehicle] Aucun vehicleId fourni")
       toast({
         title: "Erreur",
-        description: "Identifiant du véhicule manquant",
+        description: "Aucun véhicule spécifié",
         variant: "destructive",
       })
       router.push("/profile")
@@ -62,12 +61,10 @@ export default function EditVehiclePage() {
 
   const loadVehicle = async () => {
     if (!user || !vehicleId) {
-      console.error("[EditVehicle] user ou vehicleId manquant", { user: !!user, vehicleId })
       return
     }
 
     try {
-      console.log("[EditVehicle] Chargement du véhicule:", vehicleId, "pour user:", user.id)
       
       // Essayer d'abord avec le filtre flynesis_user_id
       let data = null
@@ -82,10 +79,8 @@ export default function EditVehiclePage() {
 
       if (!errorWithFilter && dataWithFilter) {
         data = dataWithFilter
-        console.log("[EditVehicle] Véhicule trouvé avec filtre flynesis_user_id")
       } else if (errorWithFilter?.code === 'PGRST116' || !dataWithFilter) {
         // Si pas trouvé avec le filtre, essayer sans
-        console.log("[EditVehicle] Tentative sans filtre flynesis_user_id")
         const { data: dataWithoutFilter, error: errorWithoutFilter } = await supabase
           .from("vehicles")
           .select("*")
@@ -94,7 +89,6 @@ export default function EditVehiclePage() {
 
         if (!errorWithoutFilter && dataWithoutFilter) {
           data = dataWithoutFilter
-          console.log("[EditVehicle] Véhicule trouvé sans filtre")
         } else {
           error = errorWithoutFilter || errorWithFilter
         }
@@ -103,44 +97,39 @@ export default function EditVehiclePage() {
       }
 
       if (error) {
-        console.error("[EditVehicle] Erreur Supabase:", error)
         throw error
       }
 
       if (!data) {
-        console.error("[EditVehicle] Aucune donnée retournée pour vehicleId:", vehicleId)
         toast({
           title: "Véhicule introuvable",
-          description: "Ce véhicule n'existe pas.",
+          description: "Le véhicule demandé n'existe pas ou vous n'avez pas les droits pour le modifier",
           variant: "destructive",
         })
         setTimeout(() => router.push("/profile"), 2000)
         return
       }
 
-      console.log("[EditVehicle] Véhicule chargé avec succès:", data)
-
       setFormData({
         brand: data.brand || "",
         model: data.model || "",
-        year: data.year?.toString() || "",
+        year: data.year ? String(data.year) : "",
         license_plate: data.license_plate || "",
+        mileage: data.mileage ? String(data.mileage) : "",
+        fuel_type: data.fuel_type || "",
+        vehicle_type: data.vehicle_type || "",
         vin: data.vin || "",
         color: data.color || "",
-        mileage: data.mileage?.toString() || "",
-        fuel_type: data.fuel_type || "",
-        vehicle_type: data.vehicle_type || "voiture",
       })
       setError(null)
     } catch (error: any) {
-      console.error("[EditVehicle] Erreur lors du chargement:", error)
       const errorMessage = error.message || "Impossible de charger le véhicule."
       setError(errorMessage)
       toast({
         title: "Erreur",
         description: errorMessage,
         variant: "destructive",
-      })
+      }) 
     } finally {
       setLoading(false)
     }
@@ -156,7 +145,16 @@ export default function EditVehiclePage() {
     if (!formData.brand || !formData.model) {
       toast({
         title: "Erreur",
-        description: "La marque et le modèle sont requis",
+        description: "Veuillez remplir au moins la marque et le modèle",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!user) {
+      toast({
+        title: "Erreur",
+        description: "Vous devez être connecté pour modifier un véhicule",
         variant: "destructive",
       })
       return
@@ -165,74 +163,38 @@ export default function EditVehiclePage() {
     setSaving(true)
 
     try {
-      console.log("[EditVehicle] Mise à jour du véhicule:", vehicleId)
-      console.log("[EditVehicle] Données à mettre à jour:", formData)
-      
+      // Récupérer le flynesis_user_id
+      const { data: flyAccount } = await supabase
+        .from("fly_accounts")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .single()
+
+      if (!flyAccount) {
+        throw new Error("Compte FlyID introuvable")
+      }
+
       const updateData: any = {
         brand: formData.brand,
         model: formData.model,
         year: formData.year ? parseInt(formData.year) : null,
         license_plate: formData.license_plate || null,
-        vin: formData.vin || null,
-        color: formData.color || null,
         mileage: formData.mileage ? parseInt(formData.mileage) : null,
         fuel_type: formData.fuel_type || null,
-        vehicle_type: formData.vehicle_type || "voiture",
       }
 
-      console.log("[EditVehicle] Update data:", updateData)
-      
-      // Essayer d'abord avec le filtre flynesis_user_id
-      let updateError = null
-      let success = false
-      
-      if (user) {
-        const { error: errorWithFilter, count: countWithFilter } = await supabase
-          .from("vehicles")
-          .update(updateData)
-          .eq("id", vehicleId)
-          .eq("flynesis_user_id", user.id)
-          .select()
+      const { error } = await supabase
+        .from("vehicles")
+        .update(updateData)
+        .eq("id", vehicleId)
+        .eq("flynesis_user_id", flyAccount.id)
 
-        console.log("[EditVehicle] Résultat avec filtre:", { errorWithFilter, countWithFilter })
-
-        if (!errorWithFilter) {
-          success = true
-          console.log("[EditVehicle] Mise à jour réussie avec filtre")
-        } else {
-          console.log("[EditVehicle] Erreur avec filtre, essai sans filtre:", errorWithFilter)
-          // Si erreur, essayer sans le filtre flynesis_user_id
-          const { error: errorWithoutFilter, count: countWithoutFilter } = await supabase
-            .from("vehicles")
-            .update(updateData)
-            .eq("id", vehicleId)
-            .select()
-
-          console.log("[EditVehicle] Résultat sans filtre:", { errorWithoutFilter, countWithoutFilter })
-
-          if (!errorWithoutFilter) {
-            success = true
-            console.log("[EditVehicle] Mise à jour réussie sans filtre")
-          } else {
-            updateError = errorWithoutFilter
-          }
-        }
-      } else {
-        throw new Error("Utilisateur non connecté")
-      }
-
-      if (!success && updateError) {
-        console.error("[EditVehicle] Erreur de mise à jour:", updateError)
-        throw updateError
-      }
-
-      if (!success) {
-        throw new Error("La mise à jour a échoué sans raison apparente")
-      }
+      if (error) throw error
 
       toast({
-        title: "Succès",
-        description: "Véhicule mis à jour avec succès",
+        title: "Véhicule mis à jour",
+        description: "Les modifications ont été enregistrées avec succès",
+        variant: "default",
       })
 
       // Attendre un peu avant de rediriger pour que l'utilisateur voie le message
@@ -240,21 +202,12 @@ export default function EditVehiclePage() {
         router.push("/profile")
       }, 1000)
     } catch (error: any) {
-      console.error("[EditVehicle] Erreur lors de la mise à jour:", error)
       const errorMessage = error.message || "Une erreur est survenue lors de la mise à jour"
       
       toast({
         title: "Erreur",
         description: errorMessage,
         variant: "destructive",
-      })
-      
-      // Afficher aussi dans la console pour debug
-      console.error("[EditVehicle] Détails de l'erreur:", {
-        message: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
       })
     } finally {
       setSaving(false)
@@ -275,13 +228,14 @@ export default function EditVehiclePage() {
       toast({
         title: "Véhicule supprimé",
         description: "Le véhicule a été supprimé avec succès",
+        variant: "default",
       })
 
       router.push("/profile")
     } catch (error: any) {
       toast({
         title: "Erreur",
-        description: error.message || "Une erreur est survenue",
+        description: error.message || "Erreur lors de la suppression",
         variant: "destructive",
       })
     }
@@ -302,8 +256,8 @@ export default function EditVehiclePage() {
   // Si erreur et pas de données, afficher un message d'erreur avec possibilité de réessayer
   if (error && !formData.brand) {
     return (
-      <div className="h-full w-full bg-gray-50 overflow-y-auto pb-20 safe-area-top safe-area-bottom">
-        <div className="max-w-2xl mx-auto px-6 py-4">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gray-50 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-28 sm:pb-32">
           <div className="flex items-center gap-4 mb-6">
             <Button
               variant="ghost"
@@ -348,8 +302,8 @@ export default function EditVehiclePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24">
-      <div className="max-w-2xl mx-auto px-6 py-4">
+    <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gray-50 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-28 sm:pb-32">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <Button
@@ -532,10 +486,6 @@ export default function EditVehiclePage() {
                   disabled={loading || saving}
                   className="w-full h-14 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl active:scale-[0.99] font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                   onClick={(e) => {
-                    console.log("[EditVehicle] Bouton sauvegarder cliqué")
-                    console.log("[EditVehicle] État du formulaire:", formData)
-                    console.log("[EditVehicle] vehicleId:", vehicleId)
-                    console.log("[EditVehicle] user:", user?.id)
                   }}
                 >
                   {saving ? (

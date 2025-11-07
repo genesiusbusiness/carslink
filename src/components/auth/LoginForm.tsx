@@ -33,21 +33,17 @@ export function LoginForm() {
       
       // Si la fonction RPC fonctionne et retourne true, l'email existe DANS VOTRE BASE FLYNESIS
       if (!rpcError && rpcData === true) {
-        console.log('[checkEmailExists] ✅ Email trouvé dans la base Flynesis via RPC:', normalizedEmail)
         return true
       }
       
       // Si la fonction RPC retourne false explicitement, l'email n'existe PAS dans votre base Flynesis
       if (!rpcError && rpcData === false) {
-        console.log('[checkEmailExists] ❌ Email NON TROUVÉ dans la base Flynesis via RPC:', normalizedEmail)
         return false
       }
       
       // Si la fonction RPC échoue (peut-être pas encore déployée ou erreur)
       // On ne peut pas vérifier directement auth.users, donc on considère que l'email n'existe pas
       // C'est plus sûr que de retourner true par erreur
-      console.warn('[checkEmailExists] ⚠️ RPC a échoué ou n\'existe pas:', rpcError)
-      console.log('[checkEmailExists] Mode sécurité : considérant que l\'email n\'existe PAS dans la base Flynesis')
       
       // Ne PAS vérifier dans fly_accounts car :
       // 1. RLS peut bloquer la requête
@@ -58,7 +54,6 @@ export function LoginForm() {
       return false
     } catch (err) {
       // En cas d'erreur, considérer que l'email n'existe pas dans votre base Flynesis (par sécurité)
-      console.error('[checkEmailExists] ❌ Erreur lors de la vérification dans la base Flynesis:', err)
       return false
     }
   }
@@ -107,7 +102,6 @@ export function LoginForm() {
       }
     } catch (error: any) {
       // DEBUG: Log pour diagnostiquer
-      console.log('[Login] Erreur Supabase:', error.message, 'Code:', error.status)
       
       let errorMessage = "Email ou mot de passe incorrect"
       
@@ -123,7 +117,6 @@ export function LoginForm() {
         // Vérifier si l'email existe vraiment
         const emailExists = await checkEmailExists(email)
         
-        console.log('[Login] Email vérifié:', email, 'Existe:', emailExists)
         
         // RÈGLE ABSOLUE : Si l'email n'existe pas, TOUJOURS dire "pas de compte"
         if (!emailExists) {
@@ -158,8 +151,6 @@ export function LoginForm() {
                     email: email.toLowerCase().trim(),
                     password: password,
                   })
-                  
-                  if (loginError) throw loginError
                   
                   if (loginData.session && loginData.user) {
                     elegantToasts.loginSuccess()
@@ -201,7 +192,6 @@ export function LoginForm() {
               }
             }
           } catch (err) {
-            console.error('Erreur lors de la confirmation automatique:', err)
             showElegantToast({
               title: 'Confirmation impossible',
               message: 'Impossible de confirmer automatiquement votre email.',
@@ -238,10 +228,10 @@ export function LoginForm() {
   }
 
   return (
-    <div className="max-w-sm mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="space-y-3">
-          <Label htmlFor="email" className="text-sm text-gray-600 pl-1">
+    <div className="w-full">
+      <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-7">
+        <div className="space-y-2.5 sm:space-y-3">
+          <Label htmlFor="email" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
             Adresse e-mail
           </Label>
           <Input
@@ -252,12 +242,12 @@ export function LoginForm() {
             placeholder="nom@exemple.com"
             required
             disabled={loading}
-            className="h-14 px-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+            className="h-14 sm:h-16 text-base px-5 sm:px-6 bg-gray-50/80 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300"
           />
         </div>
 
-        <div className="space-y-3">
-          <Label htmlFor="password" className="text-sm text-gray-600 pl-1">
+        <div className="space-y-2.5 sm:space-y-3">
+          <Label htmlFor="password" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
             Mot de passe
           </Label>
           <Input
@@ -268,33 +258,33 @@ export function LoginForm() {
             placeholder="Entrez votre mot de passe"
             required
             disabled={loading}
-            className="h-14 px-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+            className="h-14 sm:h-16 text-base px-5 sm:px-6 bg-gray-50/80 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300"
           />
         </div>
 
-        <div className="pt-4">
+        <div className="pt-2 sm:pt-3">
           <Button 
             type="submit" 
             disabled={loading}
-            className="w-full h-14 bg-black text-white rounded-xl hover:bg-gray-900 transition-all shadow-sm active:scale-[0.99] disabled:opacity-50"
+            className="w-full h-14 sm:h-16 text-base sm:text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Connexion..." : "Se connecter"}
           </Button>
         </div>
 
         {/* Info Flynesis ID */}
-        <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl mt-4">
-          <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-blue-700">
-            <strong>CarsLink est affilié à Flynesis ID.</strong> Vous pouvez vous connecter avec votre compte FlyID existant.
+        <div className="flex items-start gap-3.5 p-4.5 bg-gradient-to-br from-blue-50 to-purple-50 border-2 border-blue-200/50 rounded-xl mt-5 sm:mt-6">
+          <Info className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs sm:text-sm text-blue-800 leading-relaxed">
+            <strong className="font-semibold">CarsLink est affilié à Flynesis ID.</strong> Vous pouvez vous connecter avec votre compte FlyID existant.
           </p>
         </div>
 
-        <p className="text-xs text-center text-gray-500 pt-2">
+        <p className="text-xs sm:text-sm text-center text-gray-500 pt-3 sm:pt-4">
           Mot de passe oublié ?{' '}
           <button
             type="button"
-            className="text-black underline"
+            className="text-blue-600 hover:text-blue-700 font-medium underline underline-offset-2 transition-colors"
             onClick={() => {
               // TODO: Implémenter la réinitialisation de mot de passe
               elegantToasts.comingSoon()

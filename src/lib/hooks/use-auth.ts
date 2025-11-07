@@ -29,8 +29,47 @@ export function useAuth() {
   }, [])
 
   const signOut = async () => {
-    await supabase.auth.signOut()
-    router.push("/login")
+    try {
+      
+      // Nettoyer le localStorage et sessionStorage avant la déconnexion
+      if (typeof window !== 'undefined') {
+        localStorage.clear()
+        sessionStorage.clear()
+      }
+      
+      const { error } = await supabase.auth.signOut()
+      
+      if (error) {
+        console.error("[useAuth] Erreur lors de la déconnexion:", error)
+        throw error
+      }
+      
+      
+      // Forcer le refresh et la redirection
+      router.push("/login")
+      router.refresh()
+      
+      // S'assurer que la session est bien supprimée avec un délai
+      setTimeout(() => {
+        // Nettoyer à nouveau au cas où
+        if (typeof window !== 'undefined') {
+          localStorage.clear()
+          sessionStorage.clear()
+        }
+        window.location.href = "/login"
+      }, 100)
+    } catch (error) {
+      console.error("[useAuth] Erreur lors de la déconnexion:", error)
+      // Nettoyer quand même
+      if (typeof window !== 'undefined') {
+        localStorage.clear()
+        sessionStorage.clear()
+      }
+      // Même en cas d'erreur, rediriger vers login
+      router.push("/login")
+      router.refresh()
+      window.location.href = "/login"
+    }
   }
 
   return { user, loading, signOut }

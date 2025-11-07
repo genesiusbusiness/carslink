@@ -20,10 +20,12 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
     email: '',
     phone: '',
     password: '',
+    confirmPassword: '',
   })
-  const [loading, setLoading] = useState(false)
   const [emailExists, setEmailExists] = useState(false)
   const [checkingEmail, setCheckingEmail] = useState(false)
+  const [passwordMismatch, setPasswordMismatch] = useState(false)
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -41,15 +43,14 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
 
           // La fonction RPC retourne un boolean
           if (error) {
-            console.error('Erreur lors de la vérification de l\'email:', error)
+            // Error checking email
             setEmailExists(false)
           } else {
-            // data est true si l'email existe, false sinon
+            // data is true if l'email exists, false sinon
             setEmailExists(data === true)
           }
         } catch (err) {
           // En cas d'erreur, on considère que l'email est disponible
-          console.error('Erreur lors de la vérification de l\'email:', err)
           setEmailExists(false)
         } finally {
           setCheckingEmail(false)
@@ -83,7 +84,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
     e.preventDefault()
     
     // Valider les champs requis
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.confirmPassword) {
       toast({
         title: "Champs requis",
         description: "Veuillez remplir tous les champs obligatoires",
@@ -91,6 +92,18 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
       })
       return
     }
+
+    // Vérifier que les mots de passe correspondent
+    if (formData.password !== formData.confirmPassword) {
+      setPasswordMismatch(true)
+      toast({
+        title: "Mots de passe différents",
+        description: "Les mots de passe ne correspondent pas",
+        variant: "destructive",
+      })
+      return
+    }
+    setPasswordMismatch(false)
 
     // Bloquer si l'email existe déjà
     if (emailExists) {
@@ -136,7 +149,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
         .rpc('check_email_exists', { email_to_check: formData.email.toLowerCase().trim() })
 
       if (checkError) {
-        console.error('Erreur lors de la vérification finale de l\'email:', checkError)
+        // Error checking email
       } else if (finalCheck === true) {
         // L'email existe déjà
         toast({
@@ -159,14 +172,6 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email.toLowerCase().trim(),
         password: formData.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/`,
-          data: {
-            first_name: formData.firstName,
-            last_name: formData.lastName,
-            phone: formData.phone,
-          },
-        },
       })
 
       if (authError) {
@@ -211,32 +216,47 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
       // Si Supabase retourne un user sans erreur, c'est qu'un nouveau compte a été créé
       // Pas de session = email confirmation requise (comportement normal de Supabase)
       if (authData.user) {
-        // Le trigger handle_new_auth_user() crée automatiquement le compte fly_accounts
-        // Vérifier si le compte existe déjà (créé par le trigger)
-        const { data: existingAccount } = await supabase
-          .from('fly_accounts')
-          .select('id')
-          .eq('auth_user_id', authData.user.id)
-          .maybeSingle()
+        // Utiliser la route API pour créer le profil (utilise le client admin côté serveur)
+        try {
+          const response = await fetch('/api/auth/create-profile', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              firstName: formData.firstName,
+              lastName: formData.lastName,
+              email: formData.email,
+              phone: formData.phone,
+            }),
+          })
 
-        // Si le compte n'existe pas encore, attendre un peu (le trigger peut prendre du temps)
-        if (!existingAccount) {
-          console.log('Compte fly_accounts non trouvé, attente de la création automatique par le trigger...')
-          // Le trigger va créer le compte automatiquement, pas besoin de le créer manuellement
-        } else {
-          // Mettre à jour le compte existant avec les infos complètes si nécessaire
-          const { error: updateError } = await supabase
-            .from('fly_accounts')
-            .update({
-              first_name: formData.firstName,
-              last_name: formData.lastName,
-              phone: formData.phone || null,
-            })
-            .eq('auth_user_id', authData.user.id)
+          const result = await response.json()
 
-          if (updateError) {
-            console.error('Error updating fly_accounts:', updateError)
+          if (!response.ok) {
+            // Si c'est l'erreur pgcrypto, afficher un message spécial
+            if (result.code === 'PGCRYPTO_NOT_ENABLED' || (result.error && result.error.includes('gen_random_bytes'))) {
+              toast({
+                title: "Configuration requise",
+                description: "Une extension de base de données est manquante. Contactez le support.",
+                variant: "destructive",
+              })
+            } else {
+              toast({
+                title: "Erreur",
+                description: result.error || "Erreur lors de la création du profil",
+                variant: "destructive",
+              })
+            }
+            setLoading(false)
+            return
           }
+
+          if (result.success) {
+            // Profil créé avec succès
+          }
+        } catch (profileError: any) {
+          // Ce n'est pas bloquant, on continue quand même
         }
 
         // Afficher le message de succès approprié
@@ -244,7 +264,8 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
           // Session créée = compte confirmé directement (confirmation email désactivée)
           toast({
             title: "Inscription réussie",
-            description: "Votre compte FlyID et votre profil CarsLink ont été créés avec succès",
+            description: "Votre compte a été créé avec succès.",
+            variant: "default",
           })
           router.push('/')
           router.refresh()
@@ -253,7 +274,8 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
           // Note: Si confirmation email est désactivée dans Supabase, authData.session sera toujours présent
           toast({
             title: "Inscription réussie",
-            description: "Votre compte FlyID a été créé. Vous pouvez maintenant vous connecter.",
+            description: "Votre compte a été créé. Vérifiez votre email pour confirmer votre compte.",
+            variant: "default",
           })
           // Rediriger vers la page de connexion
           if (onSwitchToLogin) {
@@ -269,10 +291,9 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
       }
     } catch (error: any) {
       // Erreur générale (déjà gérée dans le try block, mais on garde cette sécurité)
-      console.error('Erreur lors de l\'inscription:', error)
       toast({
         title: "Erreur d'inscription",
-        description: error.message || "Une erreur est survenue lors de l'inscription",
+        description: error.message || "Une erreur est survenue",
         variant: "destructive",
       })
     } finally {
@@ -281,11 +302,11 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
   }
 
   return (
-    <div className="max-w-sm mx-auto">
-      <form onSubmit={handleSubmit} className="space-y-5">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Label htmlFor="firstName" className="text-sm text-gray-600 pl-1">
+    <div className="w-full">
+      <form onSubmit={handleSubmit} className="space-y-6 sm:space-y-7">
+        <div className="grid grid-cols-2 gap-4 sm:gap-5">
+          <div className="space-y-2.5 sm:space-y-3">
+            <Label htmlFor="firstName" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
               Prénom
             </Label>
             <Input
@@ -296,12 +317,12 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
               placeholder="Jean"
               required
               disabled={loading}
-              className="h-14 px-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+              className="h-14 sm:h-16 text-base px-5 sm:px-6 bg-gray-50/80 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300"
             />
           </div>
 
-          <div className="space-y-3">
-            <Label htmlFor="lastName" className="text-sm text-gray-600 pl-1">
+          <div className="space-y-2.5 sm:space-y-3">
+            <Label htmlFor="lastName" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
               Nom
             </Label>
             <Input
@@ -312,13 +333,13 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
               placeholder="Dupont"
               required
               disabled={loading}
-              className="h-14 px-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+              className="h-14 sm:h-16 text-base px-5 sm:px-6 bg-gray-50/80 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300"
             />
           </div>
         </div>
 
-        <div className="space-y-3">
-          <Label htmlFor="email" className="text-sm text-gray-600 pl-1">
+        <div className="space-y-2.5 sm:space-y-3">
+          <Label htmlFor="email" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
             Adresse e-mail
           </Label>
           <div>
@@ -330,23 +351,23 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
               placeholder="nom@exemple.com"
               required
               disabled={loading}
-              className={`h-14 px-4 bg-white border rounded-xl focus:ring-2 focus:border-transparent transition-all ${
+              className={`h-13 sm:h-14 text-base px-5 sm:px-6 bg-gray-50/80 border-2 rounded-xl focus:ring-2 focus:border-transparent transition-all shadow-sm hover:border-gray-300 ${
                 emailExists 
-                  ? 'border-red-500 bg-red-50 focus:ring-red-500' 
-                  : 'border-gray-200 focus:ring-black'
+                  ? 'border-red-500 bg-red-50/80 focus:ring-red-500' 
+                  : 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
               }`}
             />
             {emailExists && (
-              <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
-                <AlertCircle className="h-4 w-4" />
+              <p className="text-xs sm:text-sm text-red-600 mt-2.5 flex items-center gap-1.5">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 Cet email est déjà associé à un compte FlyID. Utilisez l'onglet "Connexion".
               </p>
             )}
           </div>
         </div>
 
-        <div className="space-y-3">
-          <Label htmlFor="phone" className="text-sm text-gray-600 pl-1">
+        <div className="space-y-2.5 sm:space-y-3">
+          <Label htmlFor="phone" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
             Numéro de téléphone
           </Label>
           <Input
@@ -364,38 +385,77 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
             placeholder="0612345678"
             required
             disabled={loading}
-            className="h-14 px-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+            className="h-13 sm:h-14 text-base px-5 sm:px-6 bg-gray-50/80 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all shadow-sm hover:border-gray-300"
           />
-          <p className="text-xs text-gray-500 pl-1">
+          <p className="text-xs sm:text-sm text-gray-500 pl-1 mt-1.5">
             Entrez uniquement des chiffres (ex: 0612345678)
           </p>
         </div>
 
-        <div className="space-y-3">
-          <Label htmlFor="password" className="text-sm text-gray-600 pl-1">
+        <div className="space-y-2.5 sm:space-y-3">
+          <Label htmlFor="password" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
             Mot de passe
           </Label>
           <Input
             id="password"
             type="password"
             value={formData.password}
-            onChange={(e) => handleChange('password', e.target.value)}
-            placeholder="Minimum 8 caractères"
+            onChange={(e) => {
+              handleChange('password', e.target.value)
+              if (formData.confirmPassword) {
+                setPasswordMismatch(e.target.value !== formData.confirmPassword)
+              }
+            }}
+            placeholder="Minimum 6 caractères"
             required
-            minLength={8}
+            minLength={6}
             disabled={loading}
-            className="h-14 px-4 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-black focus:border-transparent transition-all"
+            className={`h-13 sm:h-14 text-base px-5 sm:px-6 bg-gray-50/80 border-2 rounded-xl focus:ring-2 focus:border-transparent transition-all shadow-sm hover:border-gray-300 ${
+              passwordMismatch 
+                ? 'border-red-500 bg-red-50/80 focus:ring-red-500' 
+                : 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+            }`}
           />
         </div>
 
-        <div className="pt-4">
+        <div className="space-y-2.5 sm:space-y-3">
+          <Label htmlFor="confirmPassword" className="text-sm sm:text-base text-gray-700 font-medium pl-1">
+            Confirmer le mot de passe
+          </Label>
+          <Input
+            id="confirmPassword"
+            type="password"
+            value={formData.confirmPassword}
+            onChange={(e) => {
+              handleChange('confirmPassword', e.target.value)
+              setPasswordMismatch(e.target.value !== formData.password)
+            }}
+            placeholder="Répétez le mot de passe"
+            required
+            minLength={6}
+            disabled={loading}
+            className={`h-13 sm:h-14 text-base px-5 sm:px-6 bg-gray-50/80 border-2 rounded-xl focus:ring-2 focus:border-transparent transition-all shadow-sm hover:border-gray-300 ${
+              passwordMismatch 
+                ? 'border-red-500 bg-red-50/80 focus:ring-red-500' 
+                : 'border-gray-200 focus:ring-blue-500 focus:border-blue-500'
+            }`}
+          />
+          {passwordMismatch && (
+            <p className="text-xs sm:text-sm text-red-600 mt-2.5 flex items-center gap-1.5">
+              <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              Les mots de passe ne correspondent pas
+            </p>
+          )}
+        </div>
+
+        <div className="pt-2 sm:pt-3">
           <Button 
             type="submit"
-            disabled={loading || emailExists}
-            className={`w-full h-14 text-white rounded-xl transition-all shadow-sm active:scale-[0.99] disabled:opacity-50 ${
-              emailExists
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-black hover:bg-gray-900'
+            disabled={loading || emailExists || passwordMismatch}
+            className={`w-full h-14 sm:h-16 text-base sm:text-lg font-semibold rounded-xl transition-all shadow-lg hover:shadow-xl active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed ${
+              emailExists || passwordMismatch
+                ? 'bg-gray-400 text-white'
+                : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700'
             }`}
           >
             {loading ? "Inscription..." : "Créer mon compte"}
@@ -403,20 +463,20 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
         </div>
 
         {/* Info Flynesis ID */}
-        <div className="flex items-start gap-2 p-3 bg-purple-50 border border-purple-200 rounded-xl mt-4">
-          <Info className="h-4 w-4 text-purple-600 mt-0.5 flex-shrink-0" />
-          <p className="text-xs text-purple-700">
-            En créant un compte, un <strong>profil CarsLink</strong> et un <strong>compte FlyID</strong> seront créés automatiquement. Vous pourrez utiliser ce même compte sur tous les services Flynesis.
+        <div className="flex items-start gap-3.5 p-4.5 bg-gradient-to-br from-purple-50 to-blue-50 border-2 border-purple-200/50 rounded-xl mt-5 sm:mt-6">
+          <Info className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+          <p className="text-xs sm:text-sm text-purple-800 leading-relaxed">
+            En créant un compte, un <strong className="font-semibold">profil CarsLink</strong> et un <strong className="font-semibold">compte FlyID</strong> seront créés automatiquement. Vous pourrez utiliser ce même compte sur tous les services Flynesis.
           </p>
         </div>
 
-        <p className="text-xs text-center text-gray-500 pt-2">
+        <p className="text-xs sm:text-sm text-center text-gray-500 pt-3 sm:pt-4 leading-relaxed">
           En créant un compte, vous acceptez nos{' '}
-          <a href="/terms" className="text-black underline">
+          <a href="/terms" className="text-blue-600 hover:text-blue-700 font-medium underline underline-offset-2 transition-colors">
             conditions d'utilisation
           </a>{' '}
           et notre{' '}
-          <a href="/privacy" className="text-black underline">
+          <a href="/privacy" className="text-blue-600 hover:text-blue-700 font-medium underline underline-offset-2 transition-colors">
             politique de confidentialité
           </a>
           .

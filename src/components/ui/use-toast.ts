@@ -149,10 +149,10 @@ function toast({ title, description, ...props }: Toast) {
   dispatch({
     type: "ADD_TOAST",
     toast: {
-      title,
-      description,
       ...props,
       id,
+      title,
+      description,
       open: true,
       onOpenChange: (open) => {
         if (!open) dismiss()
@@ -183,9 +183,7 @@ function useToast() {
   return {
     ...state,
     toast,
-    dismiss: (toastId?: string) => dispatch({ type: "DISMISS_TOAST", toastId }),
   }
 }
 
 export { useToast, toast }
-

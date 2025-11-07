@@ -24,11 +24,11 @@ export default function NewVehiclePage() {
     model: "",
     year: "",
     license_plate: "",
-    vin: "",
-    color: "",
     mileage: "",
     fuel_type: "",
-    vehicle_type: "voiture",
+    vehicle_type: "",
+    vin: "",
+    color: "",
   })
 
   const handleChange = (field: string, value: string) => {
@@ -51,7 +51,7 @@ export default function NewVehiclePage() {
     if (!formData.brand || !formData.model) {
       toast({
         title: "Erreur",
-        description: "La marque et le modèle sont requis",
+        description: "Veuillez remplir au moins la marque et le modèle",
         variant: "destructive",
       })
       return
@@ -60,152 +60,85 @@ export default function NewVehiclePage() {
     setLoading(true)
 
     try {
-      // Préparer les données du véhicule
-      const vehicleData: any = {
-        flynesis_user_id: user.id,
-        brand: formData.brand,
-        model: formData.model,
-        year: formData.year ? parseInt(formData.year) : null,
-        license_plate: formData.license_plate || null,
-        vin: formData.vin || null,
-        color: formData.color || null,
-        mileage: formData.mileage ? parseInt(formData.mileage) : null,
-        fuel_type: formData.fuel_type || null,
-        vehicle_type: formData.vehicle_type || "voiture",
-      }
+      let clientId: string | null = null
+
+      // Tenter d'appeler la fonction RPC pour obtenir le client_id
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('get_carslink_client_id', { p_auth_user_id: user.id })
       
-      // STRATÉGIE : Essayer d'abord sans client_id (si le trigger existe, il le remplira automatiquement)
-      // Si ça échoue, on réessayera avec client_id obtenu via RPC ou création manuelle
-      let attemptWithoutClientId = true
-      let insertionError: any = null
-      
-      // Première tentative : sans client_id (le trigger devrait le gérer si configuré)
-      const { error: firstError } = await supabase.from("vehicles").insert(vehicleData)
-      
-      if (!firstError) {
-        // Succès ! Le trigger a probablement géré client_id
-        console.log('[Vehicle] Véhicule ajouté avec succès (trigger automatique)')
+      if (!rpcError && rpcResult) {
+        clientId = rpcResult
       } else {
-        insertionError = firstError
-        console.log('[Vehicle] Première tentative échouée, besoin de client_id:', firstError.message)
+        // Fallback: chercher directement dans carslink_users
+        const { data: carslinkUser, error: carslinkError } = await supabase
+          .from('carslink_users')
+          .select('id')
+          .eq('flynesis_user_id', user.id)
+          .eq('is_deleted', false)
+          .maybeSingle()
         
-        // Si l'erreur est liée à client_id, essayer de l'obtenir
-        if (firstError.message?.includes("client_id") || firstError.message?.includes("null value")) {
-          attemptWithoutClientId = false
-          
-          // Obtenir le carslink_user_id pour client_id
-          let clientId: string | null = null
-          
-          // Essayer d'abord avec la fonction RPC (recommandé)
-          const { data: rpcResult, error: rpcError } = await supabase
-            .rpc('get_or_create_carslink_user_id', { flynesis_user_uuid: user.id })
-          
-          if (!rpcError && rpcResult) {
-            clientId = rpcResult
-            console.log('[Vehicle] carslink_user_id obtenu via RPC:', clientId)
-          } else if (rpcError) {
-            console.warn('[Vehicle] Fonction RPC non disponible ou erreur:', rpcError)
-            
-            // Fallback: chercher directement dans carslink_users
-            const { data: carslinkUser, error: carslinkError } = await supabase
-              .from('carslink_users')
-              .select('id')
-              .eq('flynesis_user_id', user.id)
-              .eq('is_deleted', false)
-              .maybeSingle()
-            
-            if (!carslinkError && carslinkUser?.id) {
-              clientId = carslinkUser.id
-              console.log('[Vehicle] carslink_user_id trouvé directement:', clientId)
-            } else if (carslinkError?.code === 'PGRST116' || !carslinkUser) {
-              // Aucun résultat trouvé, essayer de créer
-              console.log('[Vehicle] Aucun carslink_user trouvé, tentative de création...')
-              
-              const { data: newCarslinkUser, error: createError } = await supabase
-                .from('carslink_users')
-                .insert({
-                  flynesis_user_id: user.id,
-                  role: 'client',
-                  is_active: true,
-                  is_deleted: false,
-                })
-                .select('id')
-                .single()
-              
-              if (!createError && newCarslinkUser?.id) {
-                clientId = newCarslinkUser.id
-                console.log('[Vehicle] carslink_user créé avec succès:', clientId)
-              } else if (createError) {
-                console.error('[Vehicle] Erreur lors de la création du carslink_user:', createError)
-                throw createError
-              }
-            }
-          }
-          
-          // Deuxième tentative : avec client_id
-          if (clientId) {
-            vehicleData.client_id = clientId
-            console.log('[Vehicle] Deuxième tentative avec client_id:', clientId)
-            
-            const { error: secondError } = await supabase.from("vehicles").insert(vehicleData)
-            
-            if (secondError) {
-              throw secondError
-            }
-            
-            console.log('[Vehicle] Véhicule ajouté avec succès (avec client_id explicite)')
-          } else {
-            // Impossible d'obtenir client_id, lancer l'erreur originale
-            throw firstError
-          }
+        if (!carslinkError && carslinkUser?.id) {
+          clientId = carslinkUser.id
         } else {
-          // Autre type d'erreur, la lancer directement
-          throw firstError
+          // Aucun résultat trouvé, essayer de créer
+          const { data: newCarslinkUser, error: createError } = await supabase
+            .from('carslink_users')
+            .insert({
+              flynesis_user_id: user.id,
+              first_name: user.user_metadata?.first_name || '',
+              last_name: user.user_metadata?.last_name || '',
+              email: user.email || '',
+              phone: user.phone || '',
+            })
+            .select('id')
+            .single()
+          
+          if (createError) throw createError
+          clientId = newCarslinkUser.id
         }
       }
 
-      showElegantToast({
+      if (!clientId) {
+        throw new Error("Impossible d'obtenir l'ID client.")
+      }
+
+      // Préparer les données du véhicule
+      const vehicleData: any = {
+        flynesis_user_id: user.id,
+        client_id: clientId,
+        brand: formData.brand,
+        model: formData.model,
+        year: formData.year ? parseInt(formData.year) : null,
+        license_plate: formData.license_plate.toUpperCase(),
+        mileage: formData.mileage ? parseInt(formData.mileage) : null,
+        fuel_type: formData.fuel_type,
+      }
+
+      const { error } = await supabase.from("vehicles").insert(vehicleData)
+
+      if (error) throw error
+
+      toast({
         title: "Véhicule ajouté",
-        message: "Votre véhicule a été enregistré avec succès.",
-        variant: "success",
+        description: "Votre nouveau véhicule a été enregistré avec succès.",
+        variant: "default",
       })
 
       router.push("/profile")
     } catch (error: any) {
-      console.error("Erreur lors de l'ajout du véhicule:", error)
-      
-      // Gestion spécifique des erreurs
-      if (error.message?.includes("row-level security policy") || error.message?.includes("RLS")) {
-        showElegantToast({
-          title: "Problème d'authentification",
-          message: "Impossible d'ajouter le véhicule. Vérifiez que vous êtes bien connecté et réessayez.",
-          subMessage: "Si le problème persiste, déconnectez-vous et reconnectez-vous.",
-          variant: "error",
-        })
-      } else if (error.message?.includes("foreign key constraint") && error.message?.includes("client_id")) {
-        showElegantToast({
-          title: "Configuration requise",
-          message: "La base de données nécessite une configuration supplémentaire.",
-          subMessage: "Veuillez exécuter la migration fix_vehicles_client_id_constraint.sql dans Supabase (SQL Editor), ou contactez le support.",
-          variant: "error",
-        })
-        console.error("Erreur de contrainte client_id. Migration nécessaire:", error)
-      } else {
-        showElegantToast({
-          title: "Erreur",
-          message: error.message || "Une erreur est survenue lors de l'ajout du véhicule.",
-          subMessage: "Veuillez réessayer dans quelques instants.",
-          variant: "error",
-        })
-      }
+      toast({
+        title: "Erreur",
+        description: error.message || "Une erreur est survenue lors de l'ajout du véhicule",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="h-full w-full bg-gray-50 overflow-y-auto pb-20 safe-area-top safe-area-bottom">
-      <div className="max-w-2xl mx-auto px-6 py-4">
+    <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gray-50 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-28 sm:pb-32">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
           <Button

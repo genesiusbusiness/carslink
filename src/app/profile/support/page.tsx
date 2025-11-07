@@ -37,7 +37,7 @@ export default function SupportPage() {
   const [formData, setFormData] = useState({
     subject: "",
     message: "",
-    category: "other",
+    category: "",
   })
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function SupportPage() {
       if (!session) {
         showElegantToast({
           title: "Non authentifié",
-          message: "Veuillez vous reconnecter",
+          message: "Veuillez vous connecter pour envoyer un ticket",
           variant: "error",
         })
         router.push("/login")
@@ -86,9 +86,8 @@ export default function SupportPage() {
           "Authorization": `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          subject: formData.subject.trim(),
-          message: formData.message.trim(),
-          category: formData.category,
+          subject: formData.subject,
+          message: formData.message,
         }),
       })
 
@@ -100,7 +99,7 @@ export default function SupportPage() {
 
       showElegantToast({
         title: "Ticket créé avec succès",
-        message: "Votre demande de support a été envoyée. Nous vous répondrons dans les plus brefs délais.",
+        message: "Votre demande a été envoyée. Nous vous répondrons bientôt.",
         variant: "success",
       })
 
@@ -108,7 +107,7 @@ export default function SupportPage() {
       setFormData({
         subject: "",
         message: "",
-        category: "other",
+        category: "",
       })
 
       // Rediriger vers le profil après 1.5 secondes
@@ -116,10 +115,9 @@ export default function SupportPage() {
         router.push("/profile")
       }, 1500)
     } catch (error: any) {
-      console.error("Error creating ticket:", error)
       showElegantToast({
         title: "Erreur",
-        message: error.message || "Une erreur est survenue lors de l'envoi de votre demande",
+        message: error.message || "Erreur lors de l'envoi du ticket",
         variant: "error",
       })
     } finally {
@@ -142,9 +140,9 @@ export default function SupportPage() {
   const selectedCategory = categories.find((cat) => cat.value === formData.category)
 
   return (
-    <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-20 safe-area-top safe-area-bottom">
-      <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto">
-        <div className="px-6 py-6">
+    <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
+      <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-28 sm:pb-32">
+        <div className="px-4 sm:px-6 py-6 sm:py-8 pb-28 sm:pb-32">
           {/* Header */}
           <div className="flex items-center gap-4 mb-6">
             <Button

@@ -12,5 +12,5 @@ export type {
   CarsLinkBusiness,
   CarsLinkSupportTicket,
   CarsLinkProUser
-} from '../supabaseClient'
+} from '../types/database'
 

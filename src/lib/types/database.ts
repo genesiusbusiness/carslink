@@ -12,34 +12,79 @@
 // qui correspondent à la structure réelle de la base de données Supabase
 // ============================================================================
 
-// Import des types exacts de la base de données
-import type {
-  FlyAccount,
-  FlyPermission,
-  FlyLog,
-  CarsLinkClient,
-  CarsLinkVehicle,
-  CarsLinkGarage,
-  CarsLinkService,
-  CarsLinkAppointment,
-  CarsLinkBusiness,
-  CarsLinkSupportTicket,
-  CarsLinkProUser
-} from '@/lib/supabaseClient'
+// Types de base pour la base de données
+export interface FlyAccount {
+  id: string
+  auth_user_id: string
+  role?: string | null
+  [key: string]: any
+}
 
-// Réexporter les types
-export type {
-  FlyAccount,
-  FlyPermission,
-  FlyLog,
-  CarsLinkClient,
-  CarsLinkVehicle,
-  CarsLinkGarage,
-  CarsLinkService,
-  CarsLinkAppointment,
-  CarsLinkBusiness,
-  CarsLinkSupportTicket,
-  CarsLinkProUser
+export interface FlyPermission {
+  id: string
+  [key: string]: any
+}
+
+export interface FlyLog {
+  id: string
+  [key: string]: any
+}
+
+export interface CarsLinkClient {
+  id: string
+  flynesis_user_id: string
+  first_name?: string | null
+  last_name?: string | null
+  email?: string | null
+  phone?: string | null
+  [key: string]: any
+}
+
+export interface CarsLinkVehicle {
+  id: string
+  flynesis_user_id: string
+  brand?: string | null
+  model?: string | null
+  year?: number | null
+  license_plate?: string | null
+  [key: string]: any
+}
+
+export interface CarsLinkGarage {
+  id: string
+  name?: string | null
+  address?: string | null
+  [key: string]: any
+}
+
+export interface CarsLinkService {
+  id: string
+  name?: string | null
+  [key: string]: any
+}
+
+export interface CarsLinkAppointment {
+  id: string
+  garage_id: string
+  vehicle_id?: string | null
+  status?: string | null
+  start_time?: string | null
+  [key: string]: any
+}
+
+export interface CarsLinkBusiness {
+  id: string
+  [key: string]: any
+}
+
+export interface CarsLinkSupportTicket {
+  id: string
+  [key: string]: any
+}
+
+export interface CarsLinkProUser {
+  id: string
+  [key: string]: any
 }
 
 // Alias pour compatibilité avec l'ancien code
@@ -53,35 +98,21 @@ export type Service = CarsLinkService
 export interface Invoice {
   id: string
   flynesis_user_id: string
-  appointment_id: string | null
-  invoice_number: string | null
-  total_amount: number
-  tax_amount: number | null
-  status: 'paid' | 'pending' | 'refunded' | 'cancelled'
-  pdf_url: string | null
-  created_at: string
-  updated_at: string
-  due_date: string | null
-  paid_at: string | null
+  pdf_url?: string | null
+  created_at?: string | null
+  total_amount?: number | null
+  status?: string | null
 }
 
 // Type pour les notifications
 export interface Notification {
   id: string
-  flynesis_user_id: string
-  title: string
-  message: string
-  link: string | null
-  read: boolean
-  created_at: string
-}
-
-// Type pour le suivi des réparations
-export interface RepairTracking {
-  id: string
-  appointment_id: string
-  status: string | null
-  description: string | null
-  updated_at: string
-  created_at: string
+  user_id: string
+  title?: string | null
+  message?: string | null
+  type?: string | null
+  read?: boolean | null
+  archived?: boolean | null
+  link?: string | null
+  created_at?: string | null
 }

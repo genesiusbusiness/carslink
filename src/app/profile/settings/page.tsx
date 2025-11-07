@@ -23,8 +23,8 @@ export default function SettingsPage() {
   const [formData, setFormData] = useState({
     first_name: "",
     last_name: "",
-    phone: "",
     email: "",
+    phone: "",
     address: "",
     city: "",
     postal_code: "",
@@ -57,7 +57,7 @@ export default function SettingsPage() {
         .maybeSingle()
 
       if (error) {
-        console.error("Error loading profile:", error)
+        // Error loading profile
         throw error
       }
 
@@ -68,8 +68,8 @@ export default function SettingsPage() {
         setFormData({
           first_name: data.first_name || "",
           last_name: data.last_name || "",
+          email: data.email || "",
           phone: phoneDigits,
-          email: data.email || user.email || "",
           address: data.address || "",
           city: data.city || "",
           postal_code: data.postal_code || "",
@@ -80,8 +80,8 @@ export default function SettingsPage() {
         setFormData({
           first_name: "",
           last_name: "",
-          phone: "",
           email: user.email || "",
+          phone: "",
           address: "",
           city: "",
           postal_code: "",
@@ -89,10 +89,9 @@ export default function SettingsPage() {
         })
       }
     } catch (error: any) {
-      console.error("Error loading profile:", error)
       toast({
         title: "Erreur",
-        description: error.message || "Impossible de charger le profil",
+        description: "Erreur lors du chargement du profil",
         variant: "destructive",
       })
     } finally {
@@ -150,9 +149,9 @@ export default function SettingsPage() {
         .update({
           first_name: formData.first_name || null,
           last_name: formData.last_name || null,
-          phone: formData.phone || null,
           email: formData.email || null,
-          address_line1: formData.address || null,
+          phone: formData.phone || null,
+          address: formData.address || null,
           city: formData.city || null,
           postal_code: formData.postal_code || null,
           country: formData.country || null,
@@ -168,10 +167,9 @@ export default function SettingsPage() {
         })
 
         if (authError) {
-          console.warn("Email update warning:", authError)
           toast({
             title: "Attention",
-            description: "Le profil a été mis à jour mais l'email nécessite une vérification",
+            description: "Le profil a été mis à jour mais l'email n'a pas pu être modifié dans l'authentification",
             variant: "default",
           })
         }
@@ -179,7 +177,8 @@ export default function SettingsPage() {
 
       toast({
         title: "Succès",
-        description: "Profil mis à jour avec succès",
+        description: "Vos informations ont été mises à jour avec succès",
+        variant: "default",
       })
 
       // Attendre un peu avant de rediriger pour que l'utilisateur voie le message
@@ -187,10 +186,9 @@ export default function SettingsPage() {
         router.push("/profile")
       }, 1000)
     } catch (error: any) {
-      console.error("Error updating profile:", error)
       toast({
         title: "Erreur",
-        description: error.message || "Une erreur est survenue lors de la mise à jour",
+        description: error.message || "Erreur lors de la mise à jour du profil",
         variant: "destructive",
       })
     } finally {
@@ -202,8 +200,8 @@ export default function SettingsPage() {
   if (authLoading || loading) {
     return (
       <>
-        <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-32 safe-area-top safe-area-bottom">
-          <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto pb-32 flex items-center justify-center">
+        <div className="min-h-screen w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-32 sm:pb-40 safe-area-top safe-area-bottom">
+          <div className="w-full min-h-screen bg-white/70 backdrop-blur-2xl overflow-y-auto pb-32 sm:pb-40 flex items-center justify-center">
             <div className="text-center">
               <div className="text-gray-600 mb-2 font-medium">Chargement des paramètres...</div>
               <div className="text-sm text-gray-400">Veuillez patienter</div>
@@ -222,9 +220,9 @@ export default function SettingsPage() {
 
   return (
     <>
-      <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-32 safe-area-top safe-area-bottom">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-32 sm:pb-40 safe-area-top safe-area-bottom">
         {/* Mobile Container avec effet Liquid Glass */}
-        <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto pb-32">
+        <div className="w-full min-h-full bg-white/70 backdrop-blur-2xl pb-32 sm:pb-40">
           <div className="max-w-2xl mx-auto px-6 py-6">
             {/* Header avec verre givré */}
             <div className="mb-6 pb-6 border-b border-white/20">
@@ -428,10 +426,9 @@ export default function SettingsPage() {
                     try {
                       window.open(flynesisAccountUrl, "_blank", "noopener,noreferrer")
                     } catch (error) {
-                      console.error("Erreur lors de l'ouverture de Flynesis Account:", error)
                       toast({
                         title: "Erreur",
-                        description: "Impossible d'ouvrir Flynesis Account. Vérifiez votre connexion internet.",
+                        description: "Impossible d'ouvrir Flynesis Account",
                         variant: "destructive",
                       })
                     }
@@ -466,14 +463,32 @@ export default function SettingsPage() {
                   <p className="text-sm text-gray-600">
                     Les notifications par email et push sont activées par défaut. Vous pouvez les gérer dans les paramètres de votre appareil.
                   </p>
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-3">
+                    <Button
+                      variant="outline"
+                      className="w-full h-12 justify-start group hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 hover:border-blue-200 border-2 rounded-xl transition-all font-medium"
+                      onClick={() => {
+                        router.push('/notifications')
+                      }}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 group-hover:from-blue-600 group-hover:to-purple-600 transition-colors">
+                          <Bell className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="flex-1 text-left">
+                          <div className="font-semibold text-gray-900">Voir toutes les notifications</div>
+                          <div className="text-xs text-gray-500">Consultez toutes vos notifications</div>
+                        </div>
+                      </div>
+                    </Button>
                     <Button
                       variant="outline"
                       className="w-full"
                       onClick={() => {
                         toast({
                           title: "Information",
-                          description: "Les paramètres de notification seront disponibles prochainement",
+                          description: "Fonctionnalité à venir",
+                          variant: "default",
                         })
                       }}
                     >

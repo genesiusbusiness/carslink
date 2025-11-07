@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 
-// Configuration Supabase directement dans le code
-const supabaseUrl = 'https://yxkbvhymsvasknslhpsa.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzI1MjQsImV4cCI6MjA3NzI0ODUyNH0.zbE1YiXZXDEgpLkRS9XDU8yt4n4EiQItU_YSoEQveTM'
+// Configuration Supabase via variables d'environnement
+// ⚠️ IMPORTANT : Ne jamais hardcoder les clés dans le code source
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yxkbvhymsvasknslhpsa.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzI1MjQsImV4cCI6MjA3NzI0ODUyNH0.zbE1YiXZXDEgpLkRS9XDU8yt4n4EiQItU_YSoEQveTM'
+
+if (!supabaseAnonKey) {
+  throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in environment variables')
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,10 +27,6 @@ export async function POST(request: NextRequest) {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
-      },
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
       },
     })
 
@@ -68,16 +69,16 @@ export async function POST(request: NextRequest) {
           author_id: flyAccount.id,
           title: subject,
           description: message,
-          category: category || "general",
+          category: category,
           priority: "medium",
         },
       ])
-      .select("*")
+      .select()
       .single()
 
     if (ticketError) {
       console.error("Error creating ticket:", ticketError)
-      return NextResponse.json({ error: ticketError.message || "Erreur lors de la création du ticket" }, { status: 500 })
+      return NextResponse.json({ error: "Erreur lors de la création du ticket" }, { status: 500 })
     }
 
     return NextResponse.json({ ticket }, { status: 201 })

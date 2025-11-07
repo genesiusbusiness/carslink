@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Check, ChevronRight, Calendar, Clock, CreditCard, MapPin, Car, ArrowLeft, Star, Phone, User, Mail, UserPlus, ChevronLeft, Info, Verified, Building2, Navigation } from "lucide-react"
+import Image from "next/image"
+import { Check, ChevronRight, Calendar, Clock, CreditCard, MapPin, Car, ArrowLeft, Star, User, Mail, UserPlus, ChevronLeft, Info, Verified, Building2, Navigation, Wrench, ArrowUp, ArrowDown } from "lucide-react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,7 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 
-const STEPS = [
+const STEPS_NORMAL = [
   { id: 1, name: "Service", icon: Calendar },
   { id: 2, name: "Garage", icon: MapPin },
   { id: 3, name: "Créneau", icon: Clock },
@@ -31,13 +32,29 @@ const STEPS = [
   { id: 5, name: "Récapitulatif", icon: CreditCard },
 ]
 
+const STEPS_FROM_GARAGE = [
+  { id: 1, name: "Service", icon: Calendar },
+  { id: 2, name: "Créneau", icon: Clock },
+  { id: 3, name: "Profil", icon: User },
+  { id: 4, name: "Récapitulatif", icon: CreditCard },
+]
+
 function ReservationPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
-  const [currentStep, setCurrentStep] = useState(1)
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Si on arrive avec garage + service dans l'URL, commencer directement à l'étape 2 (calendrier)
+    const garageId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get("garage") : null
+    const serviceParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get("service") : null
+    if (garageId && serviceParam) {
+      return 2 // Passer directement au calendrier
+    }
+    return 1
+  })
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  const isFromGarageDetails = !!searchParams.get("garage")
   const [selectedService, setSelectedService] = useState("")
   const [selectedServiceLabel, setSelectedServiceLabel] = useState("")
   const [selectedGarage, setSelectedGarage] = useState<Garage | null>(null)
@@ -50,7 +67,15 @@ function ReservationPageContent() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [profile, setProfile] = useState<Profile | null>(null)
   const [garageServicePrices, setGarageServicePrices] = useState<Record<string, { min: number; max: number } | null>>({})
+  const [servicePrices, setServicePrices] = useState<Record<string, number | null>>({}) // Prix par service ID pour le garage sélectionné
+  const [loadingServicePrices, setLoadingServicePrices] = useState(false) // État de chargement des prix
+  const [garageReviewsCount, setGarageReviewsCount] = useState<Record<string, number>>({})
   const [isBookingForSomeoneElse, setIsBookingForSomeoneElse] = useState(false)
+  
+  // Filtres pour les garages (peuvent être combinés)
+  const [garageSortBy, setGarageSortBy] = useState<Set<'price' | 'distance' | 'availability'>>(new Set())
+  const [garageSortOrder, setGarageSortOrder] = useState<'asc' | 'desc'>('asc') // 'asc' = croissant, 'desc' = décroissant
+  const [garageAvailabilityDays, setGarageAvailabilityDays] = useState<Record<string, number>>({}) // Nombre de jours disponibles pour chaque garage
   
   // Horaires d'ouverture et créneaux réservés
   const [openingHours, setOpeningHours] = useState<Record<number, { is_open: boolean; open_time: string | null; close_time: string | null; lunch_break_start: string | null; lunch_break_end: string | null }>>({})
@@ -63,13 +88,13 @@ function ReservationPageContent() {
   const [otherPersonInfo, setOtherPersonInfo] = useState({
     first_name: "",
     last_name: "",
-    phone: "",
     email: "",
+    phone: "",
     brand: "",
     model: "",
     license_plate: "",
     year: "",
-    fuel_type: "essence" as "essence" | "diesel" | "electrique" | "hybride" | "gpl" | null
+    fuel_type: "",
   })
   
   // État pour la navigation du calendrier mensuel
@@ -78,13 +103,25 @@ function ReservationPageContent() {
   // Options supplémentaires
   const [additionalOptions, setAdditionalOptions] = useState({
     courtesyVehicle: false,
+    pickupService: false,
     homePickup: false,
     expressBooking: false,
+    otherService: false,
   })
-  
   // Service "autre"
   const [otherServiceDescription, setOtherServiceDescription] = useState("")
   const [otherServiceFiles, setOtherServiceFiles] = useState<File[]>([])
+
+  // Mapping des noms de services de l'URL vers les IDs de service
+  const serviceNameToId: Record<string, { id: string; label: string }> = {
+    "révision": { id: "revision", label: "Révision constructeur complète" },
+    "revision": { id: "revision", label: "Révision constructeur complète" },
+    "vidange": { id: "vidange", label: "Vidange & entretien" },
+    "freinage": { id: "freinage", label: "Freinage (plaquettes, disques, liquide)" },
+    "freins": { id: "freinage", label: "Freinage (plaquettes, disques, liquide)" },
+    "pneu": { id: "changement_pneus", label: "Changement de pneus" },
+    "pneus": { id: "changement_pneus", label: "Changement de pneus" },
+  }
 
   useEffect(() => {
     if (authLoading) return
@@ -99,19 +136,63 @@ function ReservationPageContent() {
 
     // Charger la position de l'utilisateur
     getUserPosition().then(pos => {
-      setUserPosition({ latitude: pos.latitude, longitude: pos.longitude })
+      if (pos) {
+        setUserPosition({ latitude: pos.latitude, longitude: pos.longitude })
+      }
     })
 
     const garageId = searchParams.get("garage")
+    const serviceParam = searchParams.get("service")
+    
     if (garageId) {
-      loadGarage(garageId)
+      // Charger le garage et les prix en parallèle pour être plus rapide
+      Promise.all([
+        loadGarage(garageId),
+        loadAllServicePricesForGarage(garageId)
+      ]).then(() => {
+        // Une fois le garage chargé, si on a aussi un service, le sélectionner et passer au calendrier
+        if (serviceParam) {
+          const serviceLower = serviceParam.toLowerCase().trim()
+          const serviceMapping = serviceNameToId[serviceLower]
+          if (serviceMapping) {
+            setSelectedService(serviceMapping.id)
+            setSelectedServiceLabel(serviceMapping.label)
+            // Passer directement au calendrier (étape 2 du flux "from garage")
+            // Ne pas revenir à l'étape 1 même si currentStep était initialisé à 1
+            setCurrentStep(2)
+            // S'assurer que les créneaux sont chargés après le changement d'étape
+            // Le garage est déjà chargé dans loadGarage, donc on peut utiliser garageId directement
+            setTimeout(() => {
+              loadBookingSlotsForGarage(garageId)
+            }, 100)
+          }
+        }
+      }).catch(error => {
+      console.error("Erreur lors du chargement:", error)
+      })
+    } else if (serviceParam) {
+      // Si on a seulement un service (sans garage), sélectionner le service et passer à l'étape 2 pour voir les garages avec filtres
+      const serviceLower = serviceParam.toLowerCase().trim()
+      const serviceMapping = serviceNameToId[serviceLower]
+      if (serviceMapping) {
+        setSelectedService(serviceMapping.id)
+        setSelectedServiceLabel(serviceMapping.label)
+        // Passer directement à l'étape 2 pour voir les garages avec filtres
+        setCurrentStep(2)
+      }
+    }
+    
+    // Si on a garage + service dans l'URL ET qu'on est encore à l'étape 1 (premier chargement uniquement)
+    // Ne pas interférer si on est déjà à une étape supérieure (pour éviter de revenir en arrière)
+    // Utiliser une ref pour éviter les re-déclenchements
+    if (garageId && serviceParam && currentStep === 1 && !selectedService) {
+      setCurrentStep(2)
     }
   }, [user, router, searchParams, authLoading])
 
   // Charger les garages quand un service est sélectionné
   useEffect(() => {
     if (selectedService && selectedServiceLabel && currentStep >= 2) {
-      console.log("🔄 useEffect: Chargement des garages pour service:", selectedServiceLabel)
       loadGaragesForService()
     }
   }, [selectedService, selectedServiceLabel, currentStep])
@@ -122,7 +203,6 @@ function ReservationPageContent() {
       const garageId = selectedGarage.id
       // Vérifier si le prix n'est pas déjà chargé
       if (!garageServicePrices[garageId]) {
-        console.log(`🔍 Chargement prix pour garage pré-sélectionné ${garageId}, service: ${selectedServiceLabel}`)
         const loadPriceForGarage = async () => {
           const serviceName = selectedServiceLabel || selectedService
           
@@ -153,25 +233,22 @@ function ReservationPageContent() {
           const keywords = serviceKeywords[selectedService] || [serviceName]
           const searchQueries = keywords.map(keyword => `name.ilike.%${keyword}%`).join(',')
           
-          console.log(`🔍 Recherche avec keywords:`, keywords)
           
           let { data: servicePriceData, error: priceError } = await supabase
             .from("carslink_garage_services")
-            .select("base_price, price_range_min, price_range_max, name")
+            .select("price, base_price, name")
             .eq("garage_id", garageId)
             .eq("is_active", true)
             .or(searchQueries)
             .limit(1)
             .maybeSingle()
           
-          console.log("💰 Prix récupéré pour garage pré-sélectionné:", servicePriceData, "Error:", priceError)
           
           // Si aucun résultat, essayer avec le premier keyword seulement
           if (!servicePriceData && keywords.length > 0) {
-            console.log("⚠️ Aucun prix trouvé avec OR, essai avec premier keyword:", keywords[0])
             const { data: fallbackPriceData } = await supabase
               .from("carslink_garage_services")
-              .select("base_price, price_range_min, price_range_max, name")
+              .select("price, base_price, name")
               .eq("garage_id", garageId)
               .eq("is_active", true)
               .ilike("name", `%${keywords[0]}%`)
@@ -179,59 +256,47 @@ function ReservationPageContent() {
               .maybeSingle()
             
             if (fallbackPriceData) {
-              console.log("✅ Prix trouvé avec fallback:", fallbackPriceData)
               servicePriceData = fallbackPriceData
             } else {
               // Dernier recours: récupérer le premier service actif du garage
-              console.log("⚠️ Aucun prix trouvé, récupération du premier service actif du garage")
               const { data: firstService } = await supabase
                 .from("carslink_garage_services")
-                .select("base_price, price_range_min, price_range_max, name")
+                .select("price, base_price, name")
                 .eq("garage_id", garageId)
                 .eq("is_active", true)
                 .limit(1)
                 .maybeSingle()
               
               if (firstService) {
-                console.log("✅ Premier service trouvé:", firstService)
                 servicePriceData = firstService
               }
             }
           }
           
           if (servicePriceData) {
-            // Priorité: price_range_min/max > base_price
-            if (servicePriceData.price_range_min !== null && servicePriceData.price_range_min !== undefined && 
-                servicePriceData.price_range_max !== null && servicePriceData.price_range_max !== undefined) {
-              const min = typeof servicePriceData.price_range_min === 'string' 
-                ? parseFloat(servicePriceData.price_range_min) 
-                : Number(servicePriceData.price_range_min)
-              const max = typeof servicePriceData.price_range_max === 'string' 
-                ? parseFloat(servicePriceData.price_range_max) 
-                : Number(servicePriceData.price_range_max)
-              
-              if (!isNaN(min) && !isNaN(max) && min > 0 && max >= min) {
-                console.log(`✅ Plage de prix définie pour garage pré-sélectionné ${garageId}: ${min}€ - ${max}€`)
-                setGarageServicePrices(prev => ({
-                  ...prev,
-                  [garageId]: { min, max }
-                }))
-              }
-            } else if (servicePriceData.base_price !== null && servicePriceData.base_price !== undefined) {
-              // Fallback sur base_price
-              const price = typeof servicePriceData.base_price === 'string' 
-                ? parseFloat(servicePriceData.base_price) 
-                : Number(servicePriceData.base_price)
-              
-              if (!isNaN(price) && price > 0) {
-                console.log(`✅ Prix unique défini pour garage pré-sélectionné ${garageId}: ${price}€`)
-                setGarageServicePrices(prev => ({
-                  ...prev,
-                  [garageId]: { min: price, max: price }
-                }))
-              }
+            // PRIORITÉ CORRECTE selon la base de données :
+            // 1. price (prix fixe du service) - PRIORITÉ MAXIMALE
+            // 2. base_price (ancien système) - PRIORITÉ SECONDAIRE
+            
+            // Convertir toutes les valeurs en nombres pour comparaison
+            const price = servicePriceData.price != null ? Number(servicePriceData.price) : null
+            const basePrice = servicePriceData.base_price != null ? Number(servicePriceData.base_price) : null
+            
+            
+            // PRIORITÉ 1 : Utiliser le prix fixe du service (c'est le prix principal)
+            if (price != null && !isNaN(price) && price > 0) {
+              setGarageServicePrices(prev => ({
+                ...prev,
+                [garageId]: { min: price, max: price }
+              }))
+            }
+            // PRIORITÉ 2 : Fallback sur base_price
+            else if (basePrice != null && !isNaN(basePrice) && basePrice > 0) {
+              setGarageServicePrices(prev => ({
+                ...prev,
+                [garageId]: { min: basePrice, max: basePrice }
+              }))
             } else {
-              console.log(`⚠️ Aucun prix trouvé pour garage pré-sélectionné ${garageId} et service ${serviceName}`)
             }
           }
         }
@@ -256,34 +321,38 @@ function ReservationPageContent() {
     }
   }, [garages.length])
 
-  // Auto-remplir le profil à l'étape 4
+  // Auto-remplir le profil à l'étape 4 (ou 3 si depuis page détails)
   useEffect(() => {
-    if (currentStep === 4 && profile && vehicles.length > 0 && !selectedVehicle && !isBookingForSomeoneElse) {
+    const profileStep = isFromGarageDetails ? 3 : 4
+    if (currentStep === profileStep && profile && vehicles.length > 0 && !selectedVehicle && !isBookingForSomeoneElse) {
       // Sélectionner automatiquement le premier véhicule
       setSelectedVehicle(vehicles[0])
     }
-  }, [currentStep, profile, vehicles, selectedVehicle, isBookingForSomeoneElse])
+  }, [currentStep, profile, vehicles, selectedVehicle, isBookingForSomeoneElse, isFromGarageDetails])
 
   // Charger les créneaux disponibles quand le garage change (une seule fois)
   useEffect(() => {
-    if (selectedGarage?.id && currentStep >= 3) {
+    const calendarStep = isFromGarageDetails ? 2 : 3
+    if (selectedGarage?.id && currentStep >= calendarStep) {
       loadBookingSlotsForGarage(selectedGarage.id)
     }
-  }, [selectedGarage?.id, currentStep])
+  }, [selectedGarage?.id, currentStep, isFromGarageDetails])
 
   // Charger les créneaux réservés quand la date change
   useEffect(() => {
-    if (selectedGarage?.id && selectedDate && currentStep === 3) {
+    const calendarStep = isFromGarageDetails ? 2 : 3
+    if (selectedGarage?.id && selectedDate && currentStep === calendarStep) {
       loadBookedSlots(selectedGarage.id, selectedDate)
     }
-  }, [selectedGarage?.id, selectedDate, currentStep])
+  }, [selectedGarage?.id, selectedDate, currentStep, isFromGarageDetails])
 
   // Charger les créneaux de réservation du garage
   const loadBookingSlotsForGarage = async (garageId: string) => {
-    if (!garageId) return
+    if (!garageId) {
+      return
+    }
 
     try {
-      console.log(`🔍 Loading booking slots for garage: ${garageId}`)
       const { data, error } = await supabase
         .from("carslink_garage_booking_slots")
         .select("day_of_week, time_slot, is_available")
@@ -291,13 +360,11 @@ function ReservationPageContent() {
         .eq("is_available", true)
 
       if (error) {
-        console.error("❌ Error loading booking slots:", error)
         // Si erreur RLS ou table n'existe pas, utiliser les horaires d'ouverture comme fallback
         return
       }
 
       if (data && data.length > 0) {
-        console.log(`✅ Found ${data.length} booking slots`)
         const slotsMap: Record<string, Set<string>> = {}
         data.forEach((slot: any) => {
           const key = `${garageId}_${slot.day_of_week}`
@@ -310,13 +377,13 @@ function ReservationPageContent() {
             : slot.time_slot
           slotsMap[key].add(timeSlot)
         })
-        console.log(`📅 Booking slots map:`, slotsMap)
-        setBookingSlots(prev => ({ ...prev, ...slotsMap }))
+        setBookingSlots(prev => {
+          const updated = { ...prev, ...slotsMap }
+          return updated
+        })
       } else {
-        console.log(`ℹ️  No booking slots found, will use opening hours as fallback`)
       }
     } catch (error) {
-      console.error("❌ Exception loading booking slots:", error)
     }
   }
 
@@ -371,8 +438,6 @@ function ReservationPageContent() {
       // Mapper le nom du service aux services de la base
       const serviceName = selectedServiceLabel || selectedService
       
-      console.log("🔍 Loading garages for service:", serviceName)
-      console.log("🔍 Selected service ID:", selectedService)
       
       // Mapping des IDs de service vers des mots-clés de recherche dans la base
       const serviceKeywords: Record<string, string[]> = {
@@ -400,39 +465,28 @@ function ReservationPageContent() {
       
       // Récupérer les mots-clés pour ce service
       const keywords = serviceKeywords[selectedService] || [serviceName]
-      console.log("🔑 Keywords to search:", keywords)
       
       // Requête pour trouver les garages avec ce service et récupérer le prix
       // Utiliser OR avec la syntaxe correcte pour PostgREST: "col1.eq.val1,col2.eq.val2"
       const searchQueries = keywords.map(keyword => `name.ilike.%${keyword}%`).join(',')
-      console.log("🔍 Search query:", searchQueries)
       
       let { data: serviceData, error: serviceError } = await supabase
         .from("carslink_garage_services")
         .select(`
           garage_id,
+          price,
           base_price,
-          price_range_min,
-          price_range_max,
           name,
           garage:carslink_garages(*)
         `)
         .eq("is_active", true)
         .or(searchQueries)
 
-      console.log("📊 Service data found:", serviceData?.length || 0, "services")
       if (serviceData && serviceData.length > 0) {
-        console.log("💰 Prices found:", serviceData.map((s: any) => ({ 
-          garage_id: s.garage_id, 
-          base_price: s.base_price, 
-          price_range_min: s.price_range_min,
-          price_range_max: s.price_range_max,
-          name: s.name 
-        })))
+        // Traiter les données de service
       }
 
       if (serviceError) {
-        console.error("❌ Error loading garages by service:", serviceError)
         // Fallback: charger tous les garages actifs
         await loadAllGarages()
         return
@@ -440,7 +494,6 @@ function ReservationPageContent() {
       
       // Si aucun résultat avec les keywords, essayer une recherche plus large
       if (!serviceData || serviceData.length === 0) {
-        console.log("⚠️ Aucun service trouvé avec keywords, essai recherche plus large...")
         // Essayer avec juste le premier mot-clé
         const firstKeyword = keywords[0]
         if (firstKeyword) {
@@ -448,9 +501,8 @@ function ReservationPageContent() {
             .from("carslink_garage_services")
             .select(`
               garage_id,
+              price,
               base_price,
-              price_range_min,
-              price_range_max,
               name,
               garage:carslink_garages(*)
             `)
@@ -458,10 +510,8 @@ function ReservationPageContent() {
             .ilike("name", `%${firstKeyword}%`)
           
           if (fallbackData && fallbackData.length > 0) {
-            console.log("✅ Services trouvés avec fallback:", fallbackData.length)
             serviceData = fallbackData
           } else {
-            console.log("⚠️ Aucun service trouvé même avec fallback")
             // Dernier recours: charger tous les garages actifs
             await loadAllGarages()
             return
@@ -475,44 +525,43 @@ function ReservationPageContent() {
           .map((item: any) => item.garage)
           .filter((g: any) => g && (g.status === "active" || !g.status))
         
-        // Supprimer les doublons et collecter les prix
+        // Supprimer les doublons et prendre le PREMIER service correspondant pour chaque garage
         const garageMap = new Map()
         const pricesMap: Record<string, { min: number; max: number } | null> = {}
+        // Map pour stocker le premier service trouvé pour chaque garage
+        const firstServiceMap: Record<string, any> = {}
         
         serviceData.forEach((item: any) => {
           if (item.garage && !garageMap.has(item.garage.id)) {
             garageMap.set(item.garage.id, item.garage)
           }
-          // Stocker le prix du service pour ce garage (prendre le premier prix trouvé)
-          if (item.garage && !pricesMap[item.garage.id]) {
-            // Priorité: price_range_min/max > base_price
-            if (item.price_range_min !== null && item.price_range_min !== undefined && 
-                item.price_range_max !== null && item.price_range_max !== undefined) {
-              const min = typeof item.price_range_min === 'string' 
-                ? parseFloat(item.price_range_min) 
-                : Number(item.price_range_min)
-              const max = typeof item.price_range_max === 'string' 
-                ? parseFloat(item.price_range_max) 
-                : Number(item.price_range_max)
-              
-              if (!isNaN(min) && !isNaN(max) && min > 0 && max >= min) {
-                pricesMap[item.garage.id] = { min, max }
-                console.log(`✅ Plage de prix trouvée pour garage ${item.garage.id}: ${min}€ - ${max}€`)
-              }
-            } else if (item.base_price !== null && item.base_price !== undefined) {
-              // Fallback sur base_price si pas de plage
-              const price = typeof item.base_price === 'string' 
-                ? parseFloat(item.base_price) 
-                : Number(item.base_price)
-              if (!isNaN(price) && price > 0) {
-                pricesMap[item.garage.id] = { min: price, max: price }
-                console.log(`✅ Prix unique trouvé pour garage ${item.garage.id}: ${price}€`)
-              }
+          
+          // Prendre SEULEMENT le PREMIER service correspondant pour chaque garage
+          if (item.garage && !firstServiceMap[item.garage.id]) {
+            firstServiceMap[item.garage.id] = item
+            
+            
+            // PRIORITÉ CORRECTE selon la base de données :
+            // 1. price (prix fixe du service) - PRIORITÉ MAXIMALE
+            // 2. base_price (ancien système) - PRIORITÉ SECONDAIRE
+            
+            // Convertir toutes les valeurs en nombres pour comparaison
+            const price = item.price != null ? Number(item.price) : null
+            const basePrice = item.base_price != null ? Number(item.base_price) : null
+            
+            
+            // PRIORITÉ 1 : Utiliser le prix fixe du service (c'est le prix principal)
+            if (price != null && !isNaN(price) && price > 0) {
+              pricesMap[item.garage.id] = { min: price, max: price }
+            }
+            // PRIORITÉ 2 : Fallback sur base_price
+            else if (basePrice != null && !isNaN(basePrice) && basePrice > 0) {
+              pricesMap[item.garage.id] = { min: basePrice, max: basePrice }
+            } else {
             }
           }
         })
         
-        console.log("💰 Prices map:", pricesMap)
         
         const garagesList = Array.from(garageMap.values())
         
@@ -521,14 +570,52 @@ function ReservationPageContent() {
         
         setGarages(garagesList)
         setGarageServicePrices(pricesMap)
+        
+        // Charger le nombre d'avis pour ces garages
+        const garageIds = garagesList.map((g: any) => g.id)
+        await loadGaragesReviewsCount(garageIds)
       } else {
-        console.log("⚠️ Aucun garage trouvé pour le service:", serviceName)
         // Si aucun garage trouvé, charger tous les garages actifs
         await loadAllGarages()
       }
     } catch (error) {
       console.error("Error loading garages for service:", error)
       await loadAllGarages()
+    }
+  }
+
+  // Charger le nombre d'avis pour les garages
+  const loadGaragesReviewsCount = async (garageIds: string[]) => {
+    if (garageIds.length === 0) return
+    
+    try {
+      // Essayer carslink_reviews d'abord
+      let { data, error } = await supabase
+        .from("carslink_reviews")
+        .select("garage_id")
+        .in("garage_id", garageIds)
+      
+      if (error && (error.code === '42P01' || error.message?.includes('does not exist'))) {
+        // Essayer carslink_garage_reviews
+        const retryResult = await supabase
+          .from("carslink_garage_reviews")
+          .select("garage_id")
+          .in("garage_id", garageIds)
+        
+        if (!retryResult.error) {
+          data = retryResult.data
+        }
+      }
+      
+      if (data) {
+        const counts: Record<string, number> = {}
+        data.forEach((review: any) => {
+          counts[review.garage_id] = (counts[review.garage_id] || 0) + 1
+        })
+        setGarageReviewsCount(prev => ({ ...prev, ...counts }))
+      }
+    } catch (error) {
+      console.error("Error loading reviews count:", error)
     }
   }
 
@@ -563,6 +650,109 @@ function ReservationPageContent() {
     }
   }
 
+  // Charger tous les prix des services pour le garage sélectionné
+  const loadAllServicePricesForGarage = async (garageId: string) => {
+    if (!garageId) return
+
+    setLoadingServicePrices(true)
+    try {
+      
+      // D'abord, récupérer TOUS les services actifs du garage
+      const { data: allServices, error: servicesError } = await supabase
+        .from("carslink_garage_services")
+        .select("id, name, price, base_price")
+        .eq("garage_id", garageId)
+        .eq("is_active", true)
+
+      if (servicesError) {
+        setLoadingServicePrices(false)
+        return
+      }
+
+
+      // Mapping des IDs de service vers des mots-clés de recherche dans la base
+      const serviceKeywords: Record<string, string[]> = {
+        "vidange": ["vidange", "changement d'huile", "huile", "vidange moteur"],
+        "revision": ["révision", "révision complète", "entretien", "révision constructeur"],
+        "filtres": ["filtre", "filtres", "changement filtres", "filtre huile", "filtre air", "filtre carburant"],
+        "controle": ["contrôle technique", "préparation contrôle", "contre-visite", "controle technique"],
+        "freinage": ["freinage", "frein", "plaquettes", "disques", "plaquette", "disque"],
+        "suspension": ["suspension", "amortisseurs", "amortisseur"],
+        "embrayage": ["embrayage", "transmission"],
+        "moteur": ["moteur", "diagnostic", "diagnostic électronique", "réparation moteur"],
+        "climatisation": ["climatisation", "recharge climatisation", "clim", "recharge clim"],
+        "batterie": ["batterie", "test batterie", "changement batterie"],
+        "electricite": ["électricité", "phares", "vitres", "electricite", "électricité auto"],
+        "accessoires": ["accessoires", "autoradio", "caméra", "attelage", "caméra de recul"],
+        "changement_pneus": ["pneus", "montage pneus", "changement pneus", "changement de pneus"],
+        "equilibrage": ["équilibrage", "parallélisme", "equilibrage"],
+        "permutation": ["permutation", "permutation pneus", "permutation de pneus"],
+        "carrosserie": ["carrosserie", "peinture", "réparation carrosserie", "peinture auto"],
+        "polissage": ["polissage", "débosselage", "polish"],
+        "nettoyage": ["nettoyage", "lavage", "lavage auto", "nettoyage intérieur", "nettoyage extérieur"],
+        "depannage": ["dépannage", "réparation urgente", "depannage", "urgence"],
+        "devis": ["devis", "estimation"]
+      }
+
+      const pricesMap: Record<string, number | null> = {}
+
+      // Fonction pour normaliser les chaînes (enlever accents, minuscules)
+      const normalizeString = (str: string) => {
+        return str
+          .toLowerCase()
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "") // Enlever les accents
+          .trim()
+      }
+
+      // Pour chaque service ID, chercher dans tous les services du garage
+      for (const [serviceId, keywords] of Object.entries(serviceKeywords)) {
+        let matchedService = null
+
+        // Chercher dans tous les services du garage
+        if (allServices && allServices.length > 0) {
+          for (const service of allServices) {
+            const serviceNameNormalized = normalizeString(service.name)
+            
+            // Vérifier si un des keywords correspond au nom du service
+            const matches = keywords.some(keyword => {
+              const keywordNormalized = normalizeString(keyword)
+              return serviceNameNormalized.includes(keywordNormalized) || keywordNormalized.includes(serviceNameNormalized)
+            })
+
+            if (matches) {
+              matchedService = service
+              break
+            }
+          }
+        }
+
+        if (matchedService) {
+          const price = matchedService.price != null ? Number(matchedService.price) : null
+          const basePrice = matchedService.base_price != null ? Number(matchedService.base_price) : null
+          
+          // PRIORITÉ 1 : Utiliser le prix fixe du service
+          if (price != null && !isNaN(price) && price > 0) {
+            pricesMap[serviceId] = price
+          }
+          // PRIORITÉ 2 : Fallback sur base_price
+          else if (basePrice != null && !isNaN(basePrice) && basePrice > 0) {
+            pricesMap[serviceId] = basePrice
+          } else {
+            pricesMap[serviceId] = null
+          }
+        } else {
+          pricesMap[serviceId] = null
+        }
+      }
+
+      setServicePrices(pricesMap)
+    } catch (error) {
+    } finally {
+      setLoadingServicePrices(false)
+    }
+  }
+
   const loadGarage = async (garageId: string) => {
     try {
       const { data, error } = await supabase
@@ -580,7 +770,6 @@ function ReservationPageContent() {
         // Charger le prix du service pour ce garage si un service est sélectionné
         if (selectedService && selectedServiceLabel) {
           const serviceName = selectedServiceLabel || selectedService
-          console.log(`🔍 Chargement prix pour garage ${garageId}, service: ${serviceName}`)
           
           // Mapping des IDs de service vers des mots-clés de recherche dans la base
           const serviceKeywords: Record<string, string[]> = {
@@ -609,25 +798,22 @@ function ReservationPageContent() {
           const keywords = serviceKeywords[selectedService] || [serviceName]
           const searchQueries = keywords.map(keyword => `name.ilike.%${keyword}%`).join(',')
           
-          console.log(`🔍 Recherche avec keywords:`, keywords)
           
           let { data: servicePriceData, error: priceError } = await supabase
             .from("carslink_garage_services")
-            .select("base_price, price_range_min, price_range_max, name")
+            .select("price, base_price, name")
             .eq("garage_id", garageId)
             .eq("is_active", true)
             .or(searchQueries)
             .limit(1)
             .maybeSingle()
           
-          console.log("💰 Prix récupéré:", servicePriceData, "Error:", priceError)
           
           // Si aucun résultat, essayer avec le premier keyword seulement
           if (!servicePriceData && keywords.length > 0) {
-            console.log("⚠️ Aucun prix trouvé avec OR, essai avec premier keyword:", keywords[0])
             const { data: fallbackPriceData } = await supabase
               .from("carslink_garage_services")
-              .select("base_price, price_range_min, price_range_max, name")
+              .select("price, base_price, name")
               .eq("garage_id", garageId)
               .eq("is_active", true)
               .ilike("name", `%${keywords[0]}%`)
@@ -635,62 +821,61 @@ function ReservationPageContent() {
               .maybeSingle()
             
             if (fallbackPriceData) {
-              console.log("✅ Prix trouvé avec fallback:", fallbackPriceData)
               servicePriceData = fallbackPriceData
             } else {
               // Dernier recours: récupérer le premier service actif du garage
-              console.log("⚠️ Aucun prix trouvé, récupération du premier service actif du garage")
               const { data: firstService } = await supabase
                 .from("carslink_garage_services")
-                .select("base_price, price_range_min, price_range_max, name")
+                .select("price, base_price, name")
                 .eq("garage_id", garageId)
                 .eq("is_active", true)
                 .limit(1)
                 .maybeSingle()
               
               if (firstService) {
-                console.log("✅ Premier service trouvé:", firstService)
                 servicePriceData = firstService
               }
             }
           }
           
           if (servicePriceData) {
-            // Priorité: price_range_min/max > base_price
-            if (servicePriceData.price_range_min !== null && servicePriceData.price_range_min !== undefined && 
-                servicePriceData.price_range_max !== null && servicePriceData.price_range_max !== undefined) {
-              const min = typeof servicePriceData.price_range_min === 'string' 
-                ? parseFloat(servicePriceData.price_range_min) 
-                : Number(servicePriceData.price_range_min)
-              const max = typeof servicePriceData.price_range_max === 'string' 
-                ? parseFloat(servicePriceData.price_range_max) 
-                : Number(servicePriceData.price_range_max)
-              
-              if (!isNaN(min) && !isNaN(max) && min > 0 && max >= min) {
-                console.log(`✅ Plage de prix définie pour garage ${garageId}: ${min}€ - ${max}€`)
-                setGarageServicePrices(prev => ({
-                  ...prev,
-                  [garageId]: { min, max }
-                }))
-              }
-            } else if (servicePriceData.base_price !== null && servicePriceData.base_price !== undefined) {
-              // Fallback sur base_price
-              const price = typeof servicePriceData.base_price === 'string' 
-                ? parseFloat(servicePriceData.base_price) 
-                : Number(servicePriceData.base_price)
-              
-              if (!isNaN(price) && price > 0) {
-                console.log(`✅ Prix unique défini pour garage ${garageId}: ${price}€`)
-                setGarageServicePrices(prev => ({
-                  ...prev,
-                  [garageId]: { min: price, max: price }
-                }))
-              }
+            // PRIORITÉ CORRECTE selon la base de données :
+            // 1. price (prix fixe du service) - PRIORITÉ MAXIMALE
+            // 2. base_price (ancien système) - PRIORITÉ SECONDAIRE
+            
+            // Convertir toutes les valeurs en nombres pour comparaison
+            const price = servicePriceData.price != null ? Number(servicePriceData.price) : null
+            const basePrice = servicePriceData.base_price != null ? Number(servicePriceData.base_price) : null
+            
+            
+            // PRIORITÉ 1 : Utiliser le prix fixe du service (c'est le prix principal)
+            if (price != null && !isNaN(price) && price > 0) {
+              setGarageServicePrices(prev => ({
+                ...prev,
+                [garageId]: { min: price, max: price }
+              }))
+            }
+            // PRIORITÉ 2 : Fallback sur base_price
+            else if (basePrice != null && !isNaN(basePrice) && basePrice > 0) {
+              setGarageServicePrices(prev => ({
+                ...prev,
+                [garageId]: { min: basePrice, max: basePrice }
+              }))
             } else {
-              console.log(`⚠️ Aucun prix trouvé pour garage ${garageId} et service ${serviceName}`)
             }
           }
         }
+        
+        setSelectedGarage(data)
+        // Charger les horaires d'ouverture et les créneaux de réservation en parallèle
+        Promise.all([
+          loadOpeningHours(garageId),
+          loadBookingSlotsForGarage(garageId)
+        ]).catch(error => {
+          console.error("Erreur lors du chargement des horaires:", error)
+        })
+        
+        // Ne plus charger les prix ici car c'est fait en parallèle dans le useEffect
       }
     } catch (error) {
       console.error("Error loading garage:", error)
@@ -700,20 +885,17 @@ function ReservationPageContent() {
   // Charger les horaires d'ouverture du garage (pour le garage sélectionné)
   const loadOpeningHours = async (garageId: string) => {
     try {
-      console.log(`🔍 Loading opening hours for garage: ${garageId}`)
       const { data, error } = await supabase
         .from("carslink_garage_opening_hours")
         .select("*")
         .eq("garage_id", garageId)
 
       if (error) {
-        console.error("❌ Error loading opening hours:", error)
         setOpeningHours({})
         return
       }
 
       if (data && data.length > 0) {
-        console.log(`✅ Found ${data.length} opening hours entries`)
         const hoursMap: Record<number, any> = {}
         data.forEach((hour: any) => {
           // Toujours stocker l'entrée, même si is_open = false
@@ -722,18 +904,15 @@ function ReservationPageContent() {
             open_time: hour.open_time,
             close_time: hour.close_time,
             lunch_break_start: hour.lunch_break_start,
-            lunch_break_end: hour.lunch_break_end
+            lunch_break_end: hour.lunch_break_end,
           }
         })
-        console.log(`📅 Opening hours map:`, hoursMap)
         setOpeningHours(hoursMap)
       } else {
-        console.log(`ℹ️  No opening hours found for this garage`)
         // Créer un map vide pour indiquer qu'aucun jour n'est configuré
         setOpeningHours({})
       }
     } catch (error) {
-      console.error("❌ Exception loading opening hours:", error)
       setOpeningHours({})
     }
   }
@@ -754,7 +933,7 @@ function ReservationPageContent() {
             open_time: hour.open_time,
             close_time: hour.close_time,
             lunch_break_start: hour.lunch_break_start,
-            lunch_break_end: hour.lunch_break_end
+            lunch_break_end: hour.lunch_break_end,
           }
         })
         setAllGaragesOpeningHours(prev => ({
@@ -823,7 +1002,62 @@ function ReservationPageContent() {
     return formatDistance(distance)
   }
 
-  // Charger les créneaux déjà réservés pour une date donnée
+  // Obtenir la distance en kilomètres pour le tri
+  const getDistanceInKm = (garage: Garage): number | null => {
+    if (!userPosition || !garage.latitude || !garage.longitude) return null
+    return calculateDistance(
+      userPosition.latitude,
+      userPosition.longitude,
+      garage.latitude,
+      garage.longitude
+    )
+  }
+
+  // Calculer le nombre de jours disponibles pour un garage dans les 90 prochains jours
+  const calculateAvailableDaysForGarage = (garageId: string): number => {
+    const hours = allGaragesOpeningHours[garageId]
+    if (!hours || Object.keys(hours).length === 0) {
+      return 0 // Pas d'horaires chargés
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const maxDate = new Date(today)
+    maxDate.setDate(today.getDate() + 90) // 90 jours à l'avance
+
+    let availableDays = 0
+
+    for (let d = new Date(today); d <= maxDate; d.setDate(d.getDate() + 1)) {
+      const dayOfWeek = d.getDay()
+      const dayHours = hours[dayOfWeek]
+
+      // Vérifier si le jour est ouvert
+      if (dayHours && dayHours.is_open) {
+        // Vérifier s'il y a des créneaux de réservation pour ce jour
+        const bookingSlotsKey = `${garageId}_${dayOfWeek}`
+        const availableSlots = bookingSlots[bookingSlotsKey]
+
+        // Si pas de créneaux spécifiques chargés, considérer comme disponible si ouvert
+        // Si créneaux chargés, vérifier qu'il y en a au moins un
+        if (!availableSlots || availableSlots.size > 0) {
+          availableDays++
+        }
+      }
+    }
+
+    return availableDays
+  }
+
+  // Charger les jours disponibles pour tous les garages
+  useEffect(() => {
+    if (garages.length > 0 && Object.keys(allGaragesOpeningHours).length > 0) {
+      const availabilityMap: Record<string, number> = {}
+      garages.forEach(garage => {
+        availabilityMap[garage.id] = calculateAvailableDaysForGarage(garage.id)
+      })
+      setGarageAvailabilityDays(availabilityMap)
+    }
+  }, [garages.length, Object.keys(allGaragesOpeningHours).length, Object.keys(bookingSlots).length])
   const loadBookedSlots = async (garageId: string, date: Date) => {
     if (!garageId || !date) {
       setBookedSlots(new Set())
@@ -836,7 +1070,6 @@ function ReservationPageContent() {
       const endOfDay = new Date(date)
       endOfDay.setHours(23, 59, 59, 999)
 
-      console.log(`🔍 Loading booked slots for garage ${garageId} on ${date.toISOString().split('T')[0]}`)
       
       const { data, error } = await supabase
         .from("appointments")
@@ -847,13 +1080,11 @@ function ReservationPageContent() {
         .in("status", ["pending", "confirmed", "in_progress"])
 
       if (error) {
-        console.error("❌ Error loading booked slots:", error)
         setBookedSlots(new Set())
         return
       }
 
       if (data && data.length > 0) {
-        console.log(`📅 Found ${data.length} booked appointments`)
         const slots = new Set<string>()
         data.forEach((apt: any) => {
           const start = new Date(apt.start_time)
@@ -868,14 +1099,11 @@ function ReservationPageContent() {
             current.setMinutes(current.getMinutes() + 15)
           }
         })
-        console.log(`🚫 Booked slots:`, Array.from(slots))
         setBookedSlots(slots)
       } else {
-        console.log(`✅ No booked slots found`)
         setBookedSlots(new Set())
       }
     } catch (error) {
-      console.error("❌ Exception loading booked slots:", error)
       setBookedSlots(new Set())
     }
   }
@@ -893,8 +1121,26 @@ function ReservationPageContent() {
     }
   }
 
+  // Fonction pour obtenir les étapes selon le contexte
+  const getSteps = () => {
+    return isFromGarageDetails ? STEPS_FROM_GARAGE : STEPS_NORMAL
+  }
+
+  // Fonction pour obtenir le numéro d'étape réel selon le contexte
+  const getRealStepNumber = (step: number) => {
+    if (!isFromGarageDetails) return step
+    // Si on vient de la page de détails du garage, on saute l'étape 2 (Garage)
+    if (step === 1) return 1 // Service
+    if (step === 2) return 2 // Date (au lieu de Garage)
+    if (step === 3) return 3 // Créneau
+    if (step === 4) return 4 // Profil
+    if (step === 5) return 5 // Récapitulatif
+    return step
+  }
+
   const handleNext = () => {
-    if (currentStep < STEPS.length) {
+    const steps = getSteps()
+    if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -910,7 +1156,7 @@ function ReservationPageContent() {
     if (!selectedService || !selectedGarage || !selectedDate || !selectedTime) {
       showElegantToast({
         title: "Champs manquants",
-        message: "Veuillez compléter toutes les étapes avant de confirmer",
+        message: "Veuillez remplir tous les champs requis",
         variant: "error",
       })
       return
@@ -928,7 +1174,7 @@ function ReservationPageContent() {
     if (isBookingForSomeoneElse && (!otherPersonInfo.first_name || !otherPersonInfo.last_name || !otherPersonInfo.phone || !otherPersonInfo.email || !otherPersonInfo.brand || !otherPersonInfo.model || !otherPersonInfo.license_plate)) {
       showElegantToast({
         title: "Informations incomplètes",
-        message: "Veuillez remplir tous les champs obligatoires pour la personne",
+        message: "Veuillez remplir toutes les informations de la personne",
         variant: "error",
       })
       return
@@ -1027,8 +1273,8 @@ function ReservationPageContent() {
               brand: otherPersonInfo.brand,
               model: otherPersonInfo.model,
               license_plate: otherPersonInfo.license_plate,
-              year: otherPersonInfo.year || null,
-              fuel_type: otherPersonInfo.fuel_type,
+              year: otherPersonInfo.year ? parseInt(otherPersonInfo.year) : null,
+              fuel_type: otherPersonInfo.fuel_type || null,
             })
             .select()
             .single()
@@ -1050,53 +1296,25 @@ function ReservationPageContent() {
         vehicleIdToUse = selectedVehicle!.id
       }
 
-      console.log("[Reservation] 🚀 Création de la réservation dans appointments:", {
-        garage_id: selectedGarage.id,
-        flynesis_user_id: user!.id,
-        vehicle_id: vehicleIdToUse,
-        service_type: serviceTypeToSave,
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
-        status: "confirmed", // Automatiquement confirmée
-        notes: fullNotes || null,
-      })
 
       const { data: appointmentData, error } = await supabase.from("appointments").insert({
         garage_id: selectedGarage.id,
-        flynesis_user_id: user!.id,
-        vehicle_id: vehicleIdToUse,
-        service_type: serviceTypeToSave,
+        service_type: selectedServiceLabel,
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
-        status: "confirmed", // Automatiquement confirmée - le garagiste n'a pas besoin de confirmer
-        deposit_amount: 0,
-        deposit_paid: false,
-        notes: fullNotes || null,
+        vehicle_id: vehicleIdToUse,
+        status: "pending",
+        notes: fullNotes,
       }).select().single()
 
       if (error) {
-        console.error("[Reservation] ❌ Erreur lors de la création:", {
-          error,
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        })
         throw error
       }
       
       if (!appointmentData) {
-        console.error("[Reservation] ❌ Aucune donnée retournée après insertion")
         throw new Error("Impossible de créer le rendez-vous")
       }
 
-      console.log("[Reservation] ✅ Réservation créée avec succès:", {
-        id: appointmentData.id,
-        garage_id: appointmentData.garage_id,
-        status: appointmentData.status,
-        start_time: appointmentData.start_time,
-        created_at: appointmentData.created_at
-      })
 
       // Vérification immédiate que la réservation existe
       const { data: verifyData, error: verifyError } = await supabase
@@ -1106,18 +1324,15 @@ function ReservationPageContent() {
         .single()
 
       if (verifyError || !verifyData) {
-        console.error("[Reservation] ⚠️ Impossible de vérifier la réservation après création:", verifyError)
-      } else {
-        console.log("[Reservation] ✅ Vérification post-création réussie:", verifyData)
+        // Erreur de vérification, mais on continue quand même
       }
 
       // Rediriger vers la page de confirmation avec l'ID du rendez-vous
       router.push(`/reservation/confirmation?id=${appointmentData.id}`)
     } catch (error: any) {
-      console.error("Error creating appointment:", error)
       showElegantToast({
         title: "Erreur",
-        message: error.message || "Une erreur est survenue lors de la réservation",
+        message: error.message || "Erreur lors de la création du rendez-vous",
         variant: "error",
       })
     } finally {
@@ -1126,6 +1341,30 @@ function ReservationPageContent() {
   }
 
   // Générer les créneaux disponibles pour la date sélectionnée
+  // Fonction utilitaire pour vérifier si une heure est passée
+  const isTimePast = (timeSlot: string): boolean => {
+    if (!selectedDate) return false
+    
+    // Vérifier si la date sélectionnée est aujourd'hui
+    const today = new Date()
+    const selected = new Date(selectedDate)
+    
+    // Comparer les dates (année, mois, jour)
+    const isToday = 
+      today.getFullYear() === selected.getFullYear() &&
+      today.getMonth() === selected.getMonth() &&
+      today.getDate() === selected.getDate()
+    
+    if (!isToday) return false // Si ce n'est pas aujourd'hui, l'heure n'est pas passée
+    
+    // Comparer l'heure actuelle avec le créneau
+    const [hours, minutes] = timeSlot.split(":").map(Number)
+    const now = new Date()
+    const slotTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hours, minutes)
+    
+    return now >= slotTime
+  }
+
   const getAvailableTimeSlots = () => {
     if (!selectedDate || !selectedGarage) {
       const morningSlots = ["08:00", "09:00", "10:00", "11:00", "12:00"]
@@ -1137,20 +1376,14 @@ function ReservationPageContent() {
     const dayOfWeek = selectedDate.getDay()
     const dayOpeningHours = openingHours[dayOfWeek]
 
-    console.log(`📅 Getting slots for day ${dayOfWeek}, opening hours:`, dayOpeningHours)
-    console.log(`📅 Booking slots state:`, bookingSlots)
-    console.log(`🚫 Booked slots:`, Array.from(bookedSlots))
 
     // Récupérer les créneaux disponibles depuis carslink_garage_booking_slots
     const bookingSlotsKey = `${selectedGarage.id}_${dayOfWeek}`
     const availableBookingSlots = bookingSlots[bookingSlotsKey]
 
-    console.log(`🔑 Booking slots key: ${bookingSlotsKey}`)
-    console.log(`📋 Available booking slots for this day:`, availableBookingSlots ? Array.from(availableBookingSlots) : 'none')
 
     // Si le garage est fermé ce jour (selon opening_hours avec is_open = false)
     if (dayOpeningHours && dayOpeningHours.is_open === false) {
-      console.log(`❌ Garage is closed this day according to opening_hours (is_open = false)`)
       return []
     }
 
@@ -1162,12 +1395,10 @@ function ReservationPageContent() {
       
       // Si on a déjà chargé des données pour d'autres jours, ce jour est fermé
       if (hasAnyOpeningHours || hasAnyBookingSlots) {
-        console.log(`❌ Garage is closed this day (no opening hours or booking slots found, but other days are configured)`)
         return []
       }
       
       // Sinon, les données ne sont peut-être pas encore chargées
-      console.log(`⚠️  No data found for day ${dayOfWeek} (waiting for data to load)`)
       return []
     }
 
@@ -1178,7 +1409,6 @@ function ReservationPageContent() {
           // Filtrer les créneaux déjà réservés
           const isBooked = bookedSlots.has(slot)
           if (isBooked) {
-            console.log(`🚫 Slot ${slot} is already booked, filtering it out`)
           }
           return !isBooked
         })
@@ -1187,13 +1417,23 @@ function ReservationPageContent() {
           const minute = slot.substring(3, 5)
           return minute === "00"
         })
+        .filter(slot => {
+          // Filtrer les heures passées si la date sélectionnée est aujourd'hui
+          const isPast = isTimePast(slot)
+          if (isPast) {
+          }
+          return !isPast
+        })
         .sort()
       
-      console.log(`✅ Available slots after filtering:`, slotsArray)
       return slotsArray
     }
 
     // Fallback : utiliser les horaires d'ouverture si pas de créneaux spécifiques
+    if (!dayOpeningHours) {
+      return []
+    }
+
     const slots: string[] = []
     const startHour = dayOpeningHours?.open_time ? parseInt(dayOpeningHours.open_time.split(":")[0]) : 8
     const endHour = dayOpeningHours?.close_time ? parseInt(dayOpeningHours.close_time.split(":")[0]) : 18
@@ -1202,6 +1442,7 @@ function ReservationPageContent() {
 
     const lunchStart = dayOpeningHours?.lunch_break_start ? dayOpeningHours.lunch_break_start : null
     const lunchEnd = dayOpeningHours?.lunch_break_end ? dayOpeningHours.lunch_break_end : null
+
 
     for (let hour = startHour; hour <= endHour; hour++) {
       for (let minute = 0; minute < 60; minute += 15) {
@@ -1228,7 +1469,8 @@ function ReservationPageContent() {
         }
 
         // Ignorer les créneaux déjà réservés (heure complète seulement pour l'affichage initial)
-        if (minute === 0 && !bookedSlots.has(timeSlot)) {
+        // Et ignorer les heures passées si la date sélectionnée est aujourd'hui
+        if (minute === 0 && !bookedSlots.has(timeSlot) && !isTimePast(timeSlot)) {
           slots.push(timeSlot)
         }
       }
@@ -1326,14 +1568,43 @@ function ReservationPageContent() {
       // Exclure les créneaux déjà réservés
       const isBooked = bookedSlots.has(slot)
       if (isBooked) {
-        console.log(`🚫 Quarter slot ${slot} is already booked, filtering it out`)
+        return false
       }
-      return !isBooked
+      // Exclure les heures passées si la date sélectionnée est aujourd'hui
+      const isPast = isTimePast(slot)
+      if (isPast) {
+        return false
+      }
+      return true
     })
+  }
+
+  // Gérer le clic sur un sous-créneau (15/30 minutes)
+  const handleQuarterHourClick = (quarterTime: string) => {
+    // Empêcher la sélection d'heures passées
+    if (isTimePast(quarterTime)) {
+      showElegantToast({
+        title: "Heure passée",
+        message: "Vous ne pouvez pas réserver un créneau dans le passé",
+        variant: "error",
+      })
+      return
+    }
+    setSelectedQuarterHour(quarterTime)
   }
 
   // Gérer le clic sur une heure (sélection/désélection)
   const handleTimeClick = (time: string) => {
+    // Empêcher la sélection d'heures passées
+    if (isTimePast(time)) {
+      showElegantToast({
+        title: "Heure passée",
+        message: "Vous ne pouvez pas réserver un créneau dans le passé",
+        variant: "error",
+      })
+      return
+    }
+
     if (selectedTime === time) {
       // Désélectionner si déjà sélectionné
       setSelectedTime("")
@@ -1370,8 +1641,9 @@ function ReservationPageContent() {
     const days: (Date | null)[] = []
     
     // Récupérer les derniers jours du mois précédent pour compléter la première semaine
+    // Le calendrier commence par Dimanche (0), donc si le premier jour est un samedi (6), on ajoute 6 jours
     const prevMonthLastDay = new Date(year, month, 0).getDate()
-    const daysFromPrevMonth = startingDayOfWeek === 0 ? 6 : startingDayOfWeek - 1
+    const daysFromPrevMonth = startingDayOfWeek // 0 = Dimanche, donc on ajoute 0 jours. 6 = Samedi, donc on ajoute 6 jours
     
     for (let i = daysFromPrevMonth; i >= 1; i--) {
       days.push(new Date(year, month - 1, prevMonthLastDay - i + 1))
@@ -1426,7 +1698,6 @@ function ReservationPageContent() {
       
       // PRIORITÉ 1: Si les horaires sont définis et que le garage est fermé, la date n'est pas sélectionnable
       if (dayOpeningHours && dayOpeningHours.is_open === false) {
-        console.log(`❌ Date not selectable (${date.toISOString()}): opening_hours says is_open = false`)
         return false
       }
 
@@ -1438,19 +1709,16 @@ function ReservationPageContent() {
       if (hasBookingSlotsForThisGarage) {
         // Si on a des créneaux pour ce garage mais pas pour ce jour, c'est fermé
         if (availableSlots === undefined) {
-          console.log(`❌ Date not selectable (${date.toISOString()}): garage has booking slots but not for day ${dayOfWeek}`)
           return false
         }
         // Si créneaux existent mais sont vides, c'est fermé
         if (availableSlots.size === 0) {
-          console.log(`❌ Date not selectable (${date.toISOString()}): booking slots is empty for day ${dayOfWeek}`)
           return false
         }
       }
 
       // PRIORITÉ 3: Vérifier aussi via isDayClosed (double vérification)
       if (isDayClosed(date)) {
-        console.log(`❌ Date not selectable (${date.toISOString()}): isDayClosed returned true`)
         return false
       }
     }
@@ -1474,7 +1742,6 @@ function ReservationPageContent() {
     
     // PRIORITÉ 1: Si fermé selon opening_hours (is_open = false), c'est fermé
     if (dayOpeningHours && dayOpeningHours.is_open === false) {
-      console.log(`🔴 Day ${dayOfWeek} is closed: opening_hours says is_open = false`)
       return true
     }
 
@@ -1485,12 +1752,10 @@ function ReservationPageContent() {
     if (hasBookingSlotsForThisGarage) {
       // Si on a des créneaux pour ce garage mais pas pour ce jour, c'est fermé
       if (availableSlots === undefined) {
-        console.log(`🔴 Day ${dayOfWeek} is closed: garage has booking slots but not for this day`)
         return true
       }
       // Si créneaux existent mais sont vides, c'est fermé
       if (availableSlots.size === 0) {
-        console.log(`🔴 Day ${dayOfWeek} is closed: booking slots is empty`)
         return true
       }
     }
@@ -1501,7 +1766,6 @@ function ReservationPageContent() {
       const hasAnyOpeningHours = Object.keys(openingHours).length > 0
       // Si on a des données pour d'autres jours mais pas celui-ci, c'est probablement fermé
       if (hasAnyOpeningHours || hasBookingSlotsForThisGarage) {
-        console.log(`🔴 Day ${dayOfWeek} is closed: no data found but other days have data`)
         return true
       }
       // Sinon, on attend encore le chargement
@@ -1550,57 +1814,58 @@ function ReservationPageContent() {
 
   return (
     <>
-      <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-32 safe-area-top safe-area-bottom">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-32 sm:pb-40 safe-area-top safe-area-bottom">
         {/* Mobile Container avec effet Liquid Glass */}
-        <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto pb-32">
-          {/* Header avec verre givré */}
-          <div className="px-6 py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
-            <div className="flex items-center gap-4 mb-4">
+        <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-32 sm:pb-40">
+          {/* Header avec verre givré - Responsive */}
+          <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
+            <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => router.back()}
+                className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
               >
-                <ArrowLeft className="h-5 w-5" />
+                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
               </Button>
-              <div className="flex-1">
-                <h1 className="text-2xl font-light text-gray-900">Nouveau rendez-vous</h1>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xl sm:text-2xl font-light text-gray-900 truncate">Nouveau rendez-vous</h1>
               </div>
             </div>
           </div>
 
-          {/* Contenu */}
-          <div className="px-6 py-6 bg-white/30 backdrop-blur-sm">
+          {/* Contenu - Responsive */}
+          <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/30 backdrop-blur-sm">
             <Card className="bg-white/60 backdrop-blur-xl border border-white/40 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-          <CardHeader>
+          <CardHeader className="p-4 sm:p-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                {currentStep > 1 && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={handleBack}
-                    className="h-9 w-9 rounded-full hover:bg-gray-100 transition-colors"
-                  >
-                    <ArrowLeft className="h-5 w-5 text-gray-700" />
-                  </Button>
-                )}
-                <div>
-                  <CardTitle>Étape {currentStep} sur {STEPS.length}</CardTitle>
-                  <CardDescription>{STEPS[currentStep - 1].name}</CardDescription>
+              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-base sm:text-lg">Étape {currentStep} sur {getSteps().length}</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">{getSteps()[currentStep - 1].name}</CardDescription>
                 </div>
               </div>
             </div>
-            <Progress value={(currentStep / STEPS.length) * 100} className="mt-4" />
+            <Progress value={(currentStep / getSteps().length) * 100} className="mt-3 sm:mt-4" />
           </CardHeader>
-          <CardContent className="pb-8">
-            {/* Step 1: Service */}
-            {currentStep === 1 && (
-              <div className="space-y-4">
+          <CardContent className="p-4 sm:p-6 pb-6 sm:pb-8">
+            {/* Step 1: Service - Ne pas afficher si on a déjà un service depuis l'URL avec un garage */}
+            {currentStep === 1 && !(isFromGarageDetails && searchParams.get("service") && selectedService) && (
+              <div className="space-y-4 sm:space-y-6">
+                {isFromGarageDetails && selectedGarage && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                    <p className="text-sm text-blue-900 font-medium">
+                      ✅ Réservation pour : <span className="font-semibold">{selectedGarage.name}</span>
+                    </p>
+                  </div>
+                )}
                 <div>
-                  <h3 className="font-semibold mb-2 text-lg text-gray-900">Sélectionnez un service</h3>
-                  <p className="text-sm text-gray-600 mb-4">
+                  <h3 className="font-semibold mb-2 text-base sm:text-lg text-gray-900">Sélectionnez un service</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 mb-3 sm:mb-4">
                     Choisissez le type de service dont vous avez besoin
+                    {isFromGarageDetails && loadingServicePrices && (
+                      <span className="ml-2 text-blue-600 animate-pulse">(Chargement des prix...)</span>
+                    )}
                   </p>
                 </div>
                 <ServiceSelector
@@ -1615,254 +1880,68 @@ function ReservationPageContent() {
                     }
                   }}
                   additionalOptions={additionalOptions}
-                  onAdditionalOptionsChange={setAdditionalOptions}
+                  onAdditionalOptionsChange={(options) => setAdditionalOptions((prev) => ({ ...prev, ...options }))}
                   otherServiceDescription={otherServiceDescription}
                   onOtherServiceChange={setOtherServiceDescription}
                   otherServiceFiles={otherServiceFiles}
                   onOtherServiceFilesChange={setOtherServiceFiles}
+                  servicePrices={isFromGarageDetails ? servicePrices : undefined}
                 />
               </div>
             )}
 
-            {/* Step 2: Garage */}
-            {currentStep === 2 && (
-              <div className="space-y-4">
+            {/* Step 2: Garage (seulement si pas depuis la page de détails) OU Date + Créneaux (si depuis la page de détails) */}
+            {currentStep === 2 && isFromGarageDetails ? (
+              // Si on vient de la page de détails, afficher le calendrier complet avec sélection des créneaux
+              <div className="space-y-4 sm:space-y-6">
                 <div>
-                  <h3 className="font-semibold mb-2 text-lg">Choisissez un garage</h3>
-                  {selectedGarage && searchParams.get("garage") && (
-                    <p className="text-sm text-blue-600 mb-4">
-                      ✅ Garage pré-sélectionné : <span className="font-medium">{selectedGarage.name}</span>
-                    </p>
-                  )}
-                </div>
-                {selectedGarage && !garages.find(g => g.id === selectedGarage.id) && (
-                  <div className="mb-4 p-4 rounded-xl border-2 border-blue-600 bg-blue-50 shadow-md">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="font-semibold text-gray-900">{selectedGarage.name}</div>
-                          {selectedGarage.rating && (
-                            <div className="flex items-center gap-1">
-                              <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                              <span className="text-sm text-gray-600">{selectedGarage.rating.toFixed(1)}</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col gap-1 text-sm text-gray-600">
-                          {selectedGarage.address && (
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              <span>{selectedGarage.address}</span>
-                            </div>
-                          )}
-                          {selectedGarage.city && selectedGarage.postal_code && (
-                            <div>{selectedGarage.postal_code} {selectedGarage.city}</div>
-                          )}
-                          {selectedGarage.phone && (
-                            <div className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              <span>{selectedGarage.phone}</span>
-                            </div>
-                          )}
+                  <h3 className="font-light mb-2 text-lg sm:text-xl text-gray-900">Choisissez votre date</h3>
+                  <p className="text-xs sm:text-sm font-light text-gray-500 mb-3">Sélectionnez le jour de votre rendez-vous</p>
+                  
+                  {/* Légende discrète */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] sm:text-xs text-gray-500 mb-4 pb-3 border-b border-gray-200/50">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-full bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-500 relative flex items-center justify-center">
+                      </div>
+                      <span>Aujourd'hui</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 border-2 border-white relative flex items-center justify-center">
+                      </div>
+                      <span>Sélectionné</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-lg bg-gradient-to-br from-red-100/90 via-red-50/70 to-red-100/90 border-2 border-red-300/60 relative flex items-center justify-center opacity-60">
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="absolute w-full h-0.5 bg-red-400/80 transform rotate-45" />
                         </div>
                       </div>
-                      <Check className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                      <span>Fermé</span>
                     </div>
                   </div>
-                )}
-                {(() => {
-                  // S'assurer que le garage pré-sélectionné est dans la liste
-                  const allGarages = selectedGarage && !garages.find(g => g.id === selectedGarage.id)
-                    ? [selectedGarage, ...garages]
-                    : garages
-                  
-                  return allGarages.length > 0 ? (
-                    <div className="space-y-4">
-                      {allGarages.map((garage) => (
-                      <button
-                        key={garage.id}
-                        onClick={async () => {
-                          setSelectedGarage(garage)
-                          await loadOpeningHours(garage.id)
-                          await loadBookingSlotsForGarage(garage.id)
-                        }}
-                        className={`w-full p-5 rounded-2xl border-2 text-left transition-all ${
-                          selectedGarage?.id === garage.id
-                            ? "border-blue-500 bg-gradient-to-br from-blue-50 to-purple-50/30 shadow-lg shadow-blue-500/20"
-                            : "border-gray-200/60 bg-white/70 backdrop-blur-sm hover:border-blue-300/60 hover:shadow-md hover:bg-white/80"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1 space-y-3">
-                            {/* En-tête avec nom, vérification et distance */}
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="font-bold text-lg text-gray-900">{garage.name}</div>
-                                  {(garage as any).is_verified && (
-                                    <Verified className="h-4 w-4 text-blue-500 fill-blue-500" />
-                                  )}
-                                  {getDistanceFromUser(garage) && (
-                                    <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">
-                                      <Navigation className="h-3 w-3" />
-                                      <span>{getDistanceFromUser(garage)}</span>
-                                    </div>
-                                  )}
-                                </div>
-                                {garage.rating && (
-                                  <div className="flex items-center gap-1 mb-3">
-                                    <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                                    <span className="text-sm font-medium text-gray-700">{garage.rating.toFixed(1)}</span>
-                                    <span className="text-xs text-gray-500">/ 5</span>
-                                  </div>
-                                )}
-                              </div>
-                              {selectedGarage?.id === garage.id && (
-                                <motion.div
-                                  initial={{ scale: 0 }}
-                                  animate={{ scale: 1 }}
-                                  className="flex-shrink-0"
-                                >
-                                  <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md">
-                                    <Check className="h-4 w-4 text-white" />
-                                  </div>
-                                </motion.div>
-                              )}
-                            </div>
-
-                            {/* Description */}
-                            {garage.description && (
-                              <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed mb-3">
-                                {garage.description}
-                              </p>
-                            )}
-
-                            {/* Adresse complète - Toujours afficher si disponible */}
-                            {(garage.address || garage.city || garage.postal_code) && (
-                              <div className="flex items-start gap-2 mb-3 p-3 rounded-lg bg-gray-50/50 border border-gray-200/50">
-                                <MapPin className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
-                                <div className="text-gray-700 text-sm leading-relaxed flex-1">
-                                  {garage.address && (
-                                    <div className="font-medium mb-1">{garage.address}</div>
-                                  )}
-                                  {(garage.postal_code || garage.city) && (
-                                    <div className="text-gray-600">
-                                      {garage.postal_code && garage.postal_code}
-                                      {garage.postal_code && garage.city && " "}
-                                      {garage.city && garage.city}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Horaires d'ouverture - Toujours afficher */}
-                            <div className="flex items-center gap-2 mb-3 p-3 rounded-lg bg-blue-50/50 border border-blue-200/50">
-                              <Clock className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                              <div className="flex-1">
-                                <div className="text-xs text-gray-500 mb-0.5">Horaires d'ouverture</div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {getOpeningHoursSummary(garage.id) || "08:00 - 18:00"}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Prix du service et spécialités */}
-                            <div className="flex flex-col gap-3 pt-2 border-t border-gray-200/50">
-                              <div className="flex flex-wrap gap-4 items-center">
-                                {garage.phone && (
-                                  <div className="flex items-center gap-2 text-gray-700">
-                                    <Phone className="h-4 w-4 text-gray-400" />
-                                    <span className="text-sm">{garage.phone}</span>
-                                  </div>
-                                )}
-                                {(() => {
-                                  const priceRange = garageServicePrices[garage.id]
-                                  console.log(`🔍 Prix pour garage ${garage.id}:`, priceRange)
-                                  if (priceRange && priceRange.min > 0) {
-                                    const priceText = priceRange.min === priceRange.max 
-                                      ? `${priceRange.min.toFixed(0)} €`
-                                      : `${priceRange.min.toFixed(0)}€ - ${priceRange.max.toFixed(0)}€`
-                                    return (
-                                      <div className="flex items-center gap-2 text-gray-900 font-semibold bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
-                                        <span className="text-lg text-green-700">{priceText}</span>
-                                        <span className="text-xs text-green-600 font-normal">TTC</span>
-                                      </div>
-                                    )
-                                  }
-                                  return null
-                                })()}
-                              </div>
-
-                              {/* Spécialités */}
-                              {garage.specialties && garage.specialties.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                  {garage.specialties.slice(0, 3).map((specialty: string, idx: number) => (
-                                    <span
-                                      key={idx}
-                                      className="px-3 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700 border border-blue-200"
-                                    >
-                                      {specialty}
-                                    </span>
-                                  ))}
-                                  {garage.specialties.length > 3 && (
-                                    <span className="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600">
-                                      +{garage.specialties.length - 3}
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-gray-600">
-                      <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                      <p>Aucun garage disponible</p>
-                    </div>
-                  )
-                })()}
-                {selectedGarage && (
-                  <Button onClick={handleNext} className="w-full mt-4 h-12">
-                    Continuer
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {/* Step 3: Calendrier amélioré */}
-            {currentStep === 3 && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-light mb-2 text-xl text-gray-900">Choisissez votre date</h3>
-                  <p className="text-sm font-light text-gray-500">Sélectionnez le jour de votre rendez-vous</p>
                 </div>
                 
                 {/* Calendrier mensuel - Style Figma */}
                 <div className="relative">
-                  <div className="bg-white/30 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl p-6">
+                  <div className="bg-white/30 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl p-4 sm:p-6">
                     {/* En-tête avec navigation - Style Figma */}
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center justify-between mb-4 sm:mb-6">
                       <button
                         onClick={goToPreviousMonth}
-                        className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-200 text-gray-700"
+                        className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-200 text-gray-700"
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </button>
                       
-                      <h4 className="text-base font-semibold text-gray-900 capitalize">
+                      <h4 className="text-sm sm:text-base font-semibold text-gray-900 capitalize">
                         {getMonthYearString(currentMonth)}
                       </h4>
                       
                       <button
                         onClick={goToNextMonth}
-                        className="h-8 w-8 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-200 text-gray-700"
+                        className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-200 text-gray-700"
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </button>
                     </div>
 
@@ -1882,7 +1961,7 @@ function ReservationPageContent() {
                     <div className="grid grid-cols-7 gap-1">
                       {getDaysInMonth(currentMonth).map((date, index) => {
                         if (!date) {
-                          return <div key={index} className="h-10" />
+                          return (<div key={index} className="h-10" />)
                         }
                         
                         const isSelectable = isDateSelectable(date)
@@ -1904,24 +1983,24 @@ function ReservationPageContent() {
                               }
                             }}
                             className={`
-                              h-10 w-10 rounded-lg transition-all duration-200 relative flex items-center justify-center text-sm font-medium
+                              h-9 w-9 sm:h-10 sm:w-10 transition-all duration-200 relative flex items-center justify-center text-xs sm:text-sm font-medium
                               ${!isSelectable || isClosed
-                                ? "cursor-not-allowed opacity-40 text-gray-400"
+                                ? "cursor-not-allowed opacity-40 text-gray-400 rounded-lg"
                                 : "cursor-pointer hover:bg-white/30"
                               }
                               ${isSelected
-                                ? "bg-gradient-to-br from-blue-500 to-purple-500 text-white font-bold border-2 border-white shadow-xl shadow-blue-500/50 scale-110 z-10"
+                                ? "bg-gradient-to-br from-blue-500 to-purple-500 text-white font-bold border-3 border-white shadow-xl shadow-blue-500/50 scale-110 z-10 rounded-xl"
                                 : isClosed
-                                ? "bg-gradient-to-br from-red-100/90 via-red-50/70 to-red-100/90 text-red-600/80 font-medium border-2 border-red-300/60 relative overflow-hidden shadow-sm"
+                                ? "bg-gradient-to-br from-red-100/90 via-red-50/70 to-red-100/90 text-red-600/80 font-medium border-2 border-red-300/60 relative overflow-hidden shadow-sm rounded-lg"
                                 : isTodayDate && !isSelected
-                                ? "bg-blue-500/30 text-blue-700 font-bold border-2 border-blue-400 shadow-md ring-2 ring-blue-300/50"
+                                ? "bg-gradient-to-br from-indigo-100 to-blue-100 text-indigo-900 font-extrabold border-3 border-indigo-500 shadow-lg ring-3 ring-indigo-400/40 rounded-full"
                                 : isOtherMonth
-                                ? "text-gray-400"
-                                : "text-gray-700"
+                                ? "text-gray-400 rounded-lg"
+                                : "text-gray-700 rounded-lg"
                               }
                             `}
                           >
-                            {date.getDate()}
+                            <span className="relative z-10">{date.getDate()}</span>
                             
                             {/* Design élégant pour les jours fermés */}
                             {isClosed && !isSelected && (
@@ -1937,11 +2016,13 @@ function ReservationPageContent() {
                               </>
                             )}
                             
-                            {/* Indicateur "Aujourd'hui" - Plus visible */}
+                            {/* Indicateur "Aujourd'hui" - Point visible sur la bordure en haut à droite + contour renforcé */}
                             {isTodayDate && !isSelected && !isClosed && (
                               <>
-                                <div className="absolute top-0 right-0 h-2 w-2 bg-blue-500 rounded-full shadow-sm" />
-                                <div className="absolute -top-1 -right-1 h-3 w-3 bg-blue-500/30 rounded-full animate-pulse" />
+                                {/* Point visible sur la bordure en haut à droite */}
+                                <div className="absolute top-0 right-0 h-2.5 w-2.5 bg-indigo-600 rounded-full shadow-md z-10 border border-white transform translate-x-[3px] -translate-y-[3px]" />
+                                {/* Ligne de contour supplémentaire pour plus de visibilité */}
+                                <div className="absolute inset-0 rounded-full border-2 border-indigo-500/60" />
                               </>
                             )}
                             
@@ -1950,7 +2031,7 @@ function ReservationPageContent() {
                               <motion.div
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-lg"
+                                className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-xl"
                               />
                             )}
                           </button>
@@ -1978,8 +2059,8 @@ function ReservationPageContent() {
                       <span className="text-xs font-light text-gray-400">
                         {selectedDate.toLocaleDateString("fr-FR", { 
                           weekday: "long", 
-                          day: "numeric", 
-                          month: "long" 
+                          day: "numeric",
+                          month: "long"
                         })}
                       </span>
                       <div className="flex-1 h-px bg-gradient-to-l from-transparent via-gray-200 to-gray-200" />
@@ -2070,7 +2151,7 @@ function ReservationPageContent() {
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: index * 0.05 }}
-                                onClick={() => setSelectedQuarterHour(quarterTime)}
+                                onClick={() => handleQuarterHourClick(quarterTime)}
                                 className={`relative group h-12 rounded-lg border-2 transition-all duration-200 overflow-hidden ${
                                   isSelectedQuarter
                                     ? "border-blue-500 bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-md shadow-blue-500/30 scale-105"
@@ -2138,17 +2219,631 @@ function ReservationPageContent() {
                     <p className="text-xs text-center text-gray-500 mt-2 font-light">
                       {selectedDate.toLocaleDateString("fr-FR", { 
                         weekday: "long", 
-                        day: "numeric", 
-                        month: "long" 
-                      })} à {selectedTime.split(":")[0]}h{selectedQuarterHour?.split(":")[1] || "00"}
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric"
+                      })}
+                    </p>
+                  </motion.div>
+                )}
+              </div>
+            ) : currentStep === 2 && !isFromGarageDetails && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="font-semibold mb-2 text-base sm:text-lg text-gray-900">Choisissez un garage</h3>
+                  {selectedGarage && searchParams.get("garage") && (
+                    <p className="text-xs sm:text-sm text-blue-600 mb-3 sm:mb-4">
+                      ✅ Garage pré-sélectionné : <span className="font-medium">{selectedGarage.name}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Filtres de tri */}
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4">
+                  <span className="text-xs sm:text-sm text-gray-600 font-medium">Trier par :</span>
+                  <Button
+                    variant={garageSortBy.has('price') ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      const newSet = new Set(garageSortBy)
+                      if (newSet.has('price')) {
+                        newSet.delete('price')
+                      } else {
+                        newSet.add('price')
+                      }
+                      setGarageSortBy(newSet)
+                    }}
+                    className={`text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 rounded-lg transition-all ${
+                      garageSortBy.has('price')
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                        : 'bg-white/60 backdrop-blur-sm border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    💰 Prix
+                  </Button>
+                  <Button
+                    variant={garageSortBy.has('distance') ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      const newSet = new Set(garageSortBy)
+                      if (newSet.has('distance')) {
+                        newSet.delete('distance')
+                      } else {
+                        newSet.add('distance')
+                      }
+                      setGarageSortBy(newSet)
+                    }}
+                    className={`text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 rounded-lg transition-all ${
+                      garageSortBy.has('distance')
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                        : 'bg-white/60 backdrop-blur-sm border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    📍 Distance
+                  </Button>
+                  <Button
+                    variant={garageSortBy.has('availability') ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => {
+                      const newSet = new Set(garageSortBy)
+                      if (newSet.has('availability')) {
+                        newSet.delete('availability')
+                      } else {
+                        newSet.add('availability')
+                      }
+                      setGarageSortBy(newSet)
+                    }}
+                    className={`text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 rounded-lg transition-all ${
+                      garageSortBy.has('availability')
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                        : 'bg-white/60 backdrop-blur-sm border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    📅 Disponibilité
+                  </Button>
+                  
+                  {/* Bouton pour changer l'ordre croissant/décroissant */}
+                  {garageSortBy.size > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setGarageSortOrder(garageSortOrder === 'asc' ? 'desc' : 'asc')}
+                      className={`text-xs sm:text-sm h-8 sm:h-9 px-3 sm:px-4 rounded-lg transition-all bg-white/60 backdrop-blur-sm border-gray-300 text-gray-700 hover:bg-gray-50 ${
+                        garageSortOrder === 'desc' ? 'bg-blue-50 border-blue-300' : ''
+                      }`}
+                      title={garageSortOrder === 'asc' ? 'Croissant' : 'Décroissant'}
+                    >
+                      {garageSortOrder === 'asc' ? (
+                        <ArrowUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      ) : (
+                        <ArrowDown className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {(() => {
+                  // S'assurer que le garage pré-sélectionné est dans la liste
+                  let allGarages = selectedGarage && !garages.find(g => g.id === selectedGarage.id)
+                    ? [selectedGarage, ...garages]
+                    : garages
+
+                  // Appliquer le tri selon les filtres sélectionnés (peuvent être combinés)
+                  if (garageSortBy.size > 0) {
+                    const sortMultiplier = garageSortOrder === 'asc' ? 1 : -1
+                    
+                    allGarages = [...allGarages].sort((a, b) => {
+                      // Ordre de priorité : prix > distance > disponibilité
+                      // Si plusieurs filtres sont actifs, on les applique dans cet ordre
+                      
+                      // 1. Tri par prix (si actif)
+                      if (garageSortBy.has('price')) {
+                        const priceA = garageServicePrices[a.id]?.min ?? Infinity
+                        const priceB = garageServicePrices[b.id]?.min ?? Infinity
+                        if (priceA !== priceB) {
+                          return (priceA - priceB) * sortMultiplier
+                        }
+                      }
+                      
+                      // 2. Tri par distance (si actif et prix égaux ou prix non actif)
+                      if (garageSortBy.has('distance')) {
+                        const distA = getDistanceInKm(a) ?? Infinity
+                        const distB = getDistanceInKm(b) ?? Infinity
+                        if (distA !== distB) {
+                          return (distA - distB) * sortMultiplier
+                        }
+                      }
+                      
+                      // 3. Tri par disponibilité (si actif et autres critères égaux ou non actifs)
+                      if (garageSortBy.has('availability')) {
+                        const availA = garageAvailabilityDays[a.id] ?? 0
+                        const availB = garageAvailabilityDays[b.id] ?? 0
+                        if (availA !== availB) {
+                          // Croissant = moins de jours → plus de jours
+                          // Décroissant = plus de jours → moins de jours
+                          return (availA - availB) * sortMultiplier
+                        }
+                      }
+                      
+                      return 0
+                    })
+                  }
+                  
+                  return allGarages.length > 0 ? (
+                    <div className="space-y-4 sm:space-y-6">
+                      {allGarages.map((garage) => (
+                        <motion.div
+                          key={garage.id}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.4, delay: 0.1 }}
+                          className="relative group cursor-pointer"
+                          onClick={async () => {
+                            setSelectedGarage(garage)
+                            await loadOpeningHours(garage.id)
+                            await loadBookingSlotsForGarage(garage.id)
+                          }}
+                          whileHover={{ y: -2, scale: 1.01 }}
+                          whileTap={{ scale: 0.98 }}
+                        >
+                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/10 to-blue-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                          <div className={`relative bg-white/60 backdrop-blur-xl border-2 rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)] group-hover:shadow-[0_12px_40px_rgba(59,130,246,0.2)] transition-all duration-300 ${
+                            selectedGarage?.id === garage.id 
+                              ? "border-blue-500 bg-blue-50/50 ring-2 ring-blue-500 ring-offset-2" 
+                              : "border-white/40 group-hover:border-blue-300/50"
+                          }`}>
+                            {/* Indicateur de sélection */}
+                            {selectedGarage?.id === garage.id && (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="absolute top-3 right-3 z-10"
+                              >
+                                <div className="h-6 w-6 sm:h-7 sm:w-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg">
+                                  <Check className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                                </div>
+                              </motion.div>
+                            )}
+                            <div className="flex gap-3 sm:gap-4">
+                              {/* Photo du garage */}
+                              <div className="flex-shrink-0">
+                                {(garage as any).image_url || (garage as any).logo_url || (garage as any).photo_url ? (
+                                  <div className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
+                                    <Image
+                                      src={garage.image_url || (garage as any).logo_url || (garage as any).photo_url}
+                                      alt={garage.name || 'Garage'}
+                                      fill
+                                      className="object-cover"
+                                      sizes="(max-width: 640px) 80px, 96px"
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md border border-white/40">
+                                    <Wrench className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Contenu */}
+                              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                                {/* En-tête avec nom */}
+                                <div>
+                                  <h3 className="text-gray-900 text-base sm:text-lg font-medium truncate mb-2">{garage.name}</h3>
+                                  
+                                  {/* Infos : ville, distance */}
+                                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-gray-500 font-light">
+                                    {garage.city && (
+                                      <>
+                                        <div className="flex items-center gap-0.5">
+                                          <MapPin className="h-3 w-3" />
+                                          <span>{garage.city}</span>
+                                        </div>
+                                        {getDistanceFromUser(garage) && <span>•</span>}
+                                      </>
+                                    )}
+                                    {getDistanceFromUser(garage) && (
+                                      <span className="text-blue-600 font-medium">
+                                        {getDistanceFromUser(garage)}
+                                      </span>
+                                    )}
+                                    {garageAvailabilityDays[garage.id] !== undefined && (
+                                      <>
+                                        {getDistanceFromUser(garage) && <span>•</span>}
+                                        <span className="text-green-600 font-medium">
+                                          {garageAvailabilityDays[garage.id]} jour{garageAvailabilityDays[garage.id] > 1 ? 's' : ''} disponible{garageAvailabilityDays[garage.id] > 1 ? 's' : ''}
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Bas : étoile + avis à gauche, prix à droite */}
+                                <div className="flex items-center justify-between mt-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-gray-400 text-gray-400" />
+                                    <span className="text-xs sm:text-sm font-medium text-gray-700">{garage.rating?.toFixed(1) || "0.0"}</span>
+                                    <span className="text-xs text-gray-500">•</span>
+                                    <span className="text-xs text-gray-500">{garageReviewsCount[garage.id] || 0} avis</span>
+                                  </div>
+                                  
+                                  {/* Prix aligné à droite */}
+                                  {(() => {
+                                    const priceRange = garageServicePrices[garage.id]
+                                    if (priceRange && priceRange.min > 0) {
+                                      const priceText = priceRange.min === priceRange.max 
+                                        ? `${priceRange.min.toFixed(0)}€`
+                                        : `${priceRange.min.toFixed(0)}€ - ${priceRange.max.toFixed(0)}€`
+                                      return (
+                                        <div className="bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
+                                          <span className="text-base sm:text-lg text-green-700 font-bold">{priceText}</span>
+                                        </div>
+                                      )
+                                    }
+                                    return null
+                                  })()}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 sm:py-12 text-gray-600">
+                      <MapPin className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-3" />
+                      <p className="text-sm sm:text-base">Aucun garage disponible</p>
+                    </div>
+                  )
+                })()}
+                {selectedGarage && (
+                  <Button onClick={handleNext} className="w-full mt-4 sm:mt-6 h-11 sm:h-12 text-sm sm:text-base">
+                    Continuer
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Calendrier amélioré (si pas depuis page détails) OU rien (si depuis page détails) */}
+            {currentStep === 3 && !isFromGarageDetails && (
+              <div className="space-y-4 sm:space-y-6">
+                <div>
+                  <h3 className="font-light mb-2 text-lg sm:text-xl text-gray-900">Choisissez votre date</h3>
+                  <p className="text-xs sm:text-sm font-light text-gray-500 mb-3">Sélectionnez le jour de votre rendez-vous</p>
+                  
+                  {/* Légende discrète */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[10px] sm:text-xs text-gray-500 mb-4 pb-3 border-b border-gray-200/50">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-full bg-gradient-to-br from-indigo-100 to-blue-100 border-2 border-indigo-500 relative flex items-center justify-center">
+                      </div>
+                      <span>Aujourd'hui</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-xl bg-gradient-to-br from-blue-500 to-purple-500 border-2 border-white relative flex items-center justify-center">
+                      </div>
+                      <span>Sélectionné</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-lg bg-gradient-to-br from-red-100/90 via-red-50/70 to-red-100/90 border-2 border-red-300/60 relative flex items-center justify-center opacity-60">
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="absolute w-full h-0.5 bg-red-400/80 transform rotate-45" />
+                        </div>
+                      </div>
+                      <span>Fermé</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Calendrier mensuel - Style Figma */}
+                <div className="relative">
+                  <div className="bg-white/30 backdrop-blur-2xl rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl p-4 sm:p-6">
+                    {/* En-tête avec navigation - Style Figma */}
+                    <div className="flex items-center justify-between mb-4 sm:mb-6">
+                      <button
+                        onClick={goToPreviousMonth}
+                        className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-200 text-gray-700"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </button>
+                      
+                      <h4 className="text-sm sm:text-base font-semibold text-gray-900 capitalize">
+                        {getMonthYearString(currentMonth)}
+                      </h4>
+                      
+                      <button
+                        onClick={goToNextMonth}
+                        className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center hover:bg-white/30 transition-all duration-200 text-gray-700"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      </button>
+                    </div>
+
+                    {/* Jours de la semaine - Style compact Figma */}
+                    <div className="grid grid-cols-7 gap-0.5 mb-3">
+                      {["Di", "Lu", "Ma", "Me", "Je", "Ve", "Sa"].map((day) => (
+                        <div
+                          key={day}
+                          className="h-8 flex items-center justify-center text-xs font-medium text-gray-600"
+                        >
+                          {day}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Grille des dates - Style Figma */}
+                    <div className="grid grid-cols-7 gap-1">
+                      {getDaysInMonth(currentMonth).map((date, index) => {
+                        if (!date) {
+                          return (<div key={index} className="h-10" />)
+                        }
+                        
+                        const isSelectable = isDateSelectable(date)
+                        const isSelected = date && selectedDate && isSameDay(date, selectedDate)
+                        const isTodayDate = isToday(date)
+                        const isOtherMonth = date.getMonth() !== currentMonth.getMonth() || 
+                                            date.getFullYear() !== currentMonth.getFullYear()
+                        const isClosed = isDayClosed(date)
+
+                        return (
+                          <button
+                            key={index}
+                            disabled={!isSelectable || isClosed}
+                            onClick={() => {
+                              if (date && isSelectable && !isClosed) {
+                                setSelectedDate(date)
+                                setSelectedTime("")
+                                setSelectedQuarterHour("")
+                              }
+                            }}
+                            className={`
+                              h-9 w-9 sm:h-10 sm:w-10 transition-all duration-200 relative flex items-center justify-center text-xs sm:text-sm font-medium
+                              ${!isSelectable || isClosed
+                                ? "cursor-not-allowed opacity-40 text-gray-400 rounded-lg"
+                                : "cursor-pointer hover:bg-white/30"
+                              }
+                              ${isSelected
+                                ? "bg-gradient-to-br from-blue-500 to-purple-500 text-white font-bold border-3 border-white shadow-xl shadow-blue-500/50 scale-110 z-10 rounded-xl"
+                                : isClosed
+                                ? "bg-gradient-to-br from-red-100/90 via-red-50/70 to-red-100/90 text-red-600/80 font-medium border-2 border-red-300/60 relative overflow-hidden shadow-sm rounded-lg"
+                                : isTodayDate && !isSelected
+                                ? "bg-gradient-to-br from-indigo-100 to-blue-100 text-indigo-900 font-extrabold border-3 border-indigo-500 shadow-lg ring-3 ring-indigo-400/40 rounded-full"
+                                : isOtherMonth
+                                ? "text-gray-400 rounded-lg"
+                                : "text-gray-700 rounded-lg"
+                              }
+                            `}
+                          >
+                            <span className="relative z-10">{date.getDate()}</span>
+                            
+                            {/* Design élégant pour les jours fermés */}
+                            {isClosed && !isSelected && (
+                              <>
+                                {/* Ligne diagonale élégante */}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="absolute w-full h-0.5 bg-red-400/80 transform rotate-45 origin-center" />
+                                </div>
+                                {/* Point indicatif discret */}
+                                <div className="absolute top-1 right-1 h-1.5 w-1.5 bg-red-500 rounded-full" />
+                                {/* Effet de brillance/ombre subtil */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-red-200/20 to-transparent rounded-lg pointer-events-none" />
+                              </>
+                            )}
+                            
+                            {/* Indicateur "Aujourd'hui" - Point visible sur la bordure en haut à droite + contour renforcé */}
+                            {isTodayDate && !isSelected && !isClosed && (
+                              <>
+                                {/* Point visible sur la bordure en haut à droite */}
+                                <div className="absolute top-0 right-0 h-2.5 w-2.5 bg-indigo-600 rounded-full shadow-md z-10 border border-white transform translate-x-[3px] -translate-y-[3px]" />
+                                {/* Ligne de contour supplémentaire pour plus de visibilité */}
+                                <div className="absolute inset-0 rounded-full border-2 border-indigo-500/60" />
+                              </>
+                            )}
+                            
+                            {/* Indicateur pour jour sélectionné */}
+                            {isSelected && (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="absolute inset-0 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-xl"
+                              />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sélection d'heure - Style moderne avec gradient */}
+                {selectedDate && selectedDate instanceof Date && !isNaN(selectedDate.getTime()) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <label className="text-sm font-medium mb-4 block text-gray-700 flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      <span>Heure disponible</span>
+                    </label>
+                    
+                    {/* Séparateur visuel */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-200 to-gray-200" />
+                      <span className="text-xs font-light text-gray-400">
+                        {selectedDate.toLocaleDateString("fr-FR", { 
+                          weekday: "long", 
+                          day: "numeric",
+                          month: "long"
+                        })}
+                      </span>
+                      <div className="flex-1 h-px bg-gradient-to-l from-transparent via-gray-200 to-gray-200" />
+                    </div>
+
+                    {getAvailableTimeSlots().length === 0 ? (
+                      <div className="text-center py-8 p-4 rounded-xl bg-red-50/50 border border-red-200/50">
+                        <Clock className="h-8 w-8 text-red-400 mx-auto mb-2" />
+                        <p className="text-sm font-medium text-red-700 mb-1">Aucun créneau disponible</p>
+                        <p className="text-xs text-red-600">Ce jour est fermé ou tous les créneaux sont déjà réservés</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-3">
+                        {getAvailableTimeSlots().map((time, index) => {
+                        const [hours, minutes] = time.split(":")
+                        const isSelected = selectedTime === time
+                        const isMorning = parseInt(hours) < 13
+                        
+                        return (
+                          <motion.button
+                            key={time}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: index * 0.02 }}
+                            onClick={() => handleTimeClick(time)}
+                            className={`relative group h-14 rounded-xl border-2 transition-all duration-300 overflow-hidden ${
+                              isSelected
+                                ? "border-blue-500 bg-gradient-to-br from-blue-500 via-blue-600 to-purple-500 text-white shadow-lg shadow-blue-500/40 scale-105"
+                                : "border-gray-200/60 bg-white/70 backdrop-blur-sm hover:border-blue-300/80 hover:bg-blue-50/50 hover:shadow-md hover:scale-[1.02]"
+                            }`}
+                          >
+                            {/* Effet de brillance */}
+                            {!isSelected && (
+                              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 via-purple-500/0 to-blue-500/0 group-hover:from-blue-500/10 group-hover:via-purple-500/10 group-hover:to-blue-500/10 transition-all duration-300 rounded-xl" />
+                            )}
+                            
+                            {/* Indicateur matin/après-midi */}
+                            {!isSelected && (
+                              <div className={`absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full ${
+                                isMorning ? "bg-orange-400" : "bg-blue-400"
+                              } opacity-60`} />
+                            )}
+
+                            <div className="relative z-10 flex items-center justify-center h-full">
+                              <span className={`text-base font-semibold ${
+                                isSelected ? "text-white" : "text-gray-900"
+                              }`}>
+                                {time}
+                              </span>
+                            </div>
+                            
+                            {/* Check icon when selected */}
+                            {isSelected && (
+                              <motion.div
+                                initial={{ scale: 0 }}
+                                animate={{ scale: 1 }}
+                                className="absolute top-1 right-1"
+                              >
+                                <Check className="h-4 w-4 text-white" />
+                              </motion.div>
+                            )}
+                          </motion.button>
+                        )
+                      })}
+                      </div>
+                    )}
+
+                    {/* Sous-créneaux adaptatifs selon l'intervalle du garage */}
+                    {selectedTime && getSlotInterval() !== 60 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="mt-4"
+                      >
+                        <label className="text-sm font-medium mb-3 block text-gray-700 flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5" />
+                          <span>Précision ({getSlotInterval() === 30 ? '30 min' : '15 min'})</span>
+                        </label>
+                        
+                        <div className={`grid gap-2 ${getSlotInterval() === 30 ? 'grid-cols-2' : 'grid-cols-4'}`}>
+                          {getQuarterHourSlots(selectedTime).map((quarterTime, index) => {
+                            const isSelectedQuarter = selectedQuarterHour === quarterTime
+                            
+                            return (
+                              <motion.button
+                                key={quarterTime}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: index * 0.05 }}
+                                onClick={() => handleQuarterHourClick(quarterTime)}
+                                className={`relative group h-12 rounded-lg border-2 transition-all duration-200 overflow-hidden ${
+                                  isSelectedQuarter
+                                    ? "border-blue-500 bg-gradient-to-br from-blue-500 to-purple-500 text-white shadow-md shadow-blue-500/30 scale-105"
+                                    : "border-gray-200/60 bg-white/60 backdrop-blur-sm hover:border-blue-300/80 hover:bg-blue-50/40 hover:shadow-sm hover:scale-[1.02]"
+                                }`}
+                              >
+                                <div className="relative z-10 flex items-center justify-center h-full">
+                                  <span className={`text-sm font-semibold ${
+                                    isSelectedQuarter ? "text-white" : "text-gray-700"
+                                  }`}>
+                                    {quarterTime.split(":")[1]}
+                                  </span>
+                                </div>
+                                
+                                {/* Check icon when selected */}
+                                {isSelectedQuarter && (
+                                  <motion.div
+                                    initial={{ scale: 0 }}
+                                    animate={{ scale: 1 }}
+                                    className="absolute top-0.5 right-0.5"
+                                  >
+                                    <Check className="h-3 w-3 text-white" />
+                                  </motion.div>
+                                )}
+                              </motion.button>
+                            )
+                          })}
+                        </div>
+                        
+                        {/* Afficher l'heure complète sélectionnée */}
+                        {selectedQuarterHour && (
+                          <div className="mt-3 p-3 rounded-lg bg-blue-50/50 border border-blue-100/50 backdrop-blur-sm">
+                            <p className="text-xs font-medium text-gray-700 text-center">
+                              ⏰ {selectedTime.split(":")[0]}h{selectedQuarterHour?.split(":")[1] || "00"}
+                            </p>
+                          </div>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {/* Note informative */}
+                    <div className="mt-4 p-3 rounded-xl bg-blue-50/50 border border-blue-100/50 backdrop-blur-sm">
+                      <p className="text-xs font-light text-gray-600 text-center">
+                        💡 Les créneaux sont disponibles selon les horaires d'ouverture du garage
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Bouton continuer avec animation */}
+                {selectedDate && selectedDate instanceof Date && !isNaN(selectedDate.getTime()) && selectedTime && 
+                  (getSlotInterval() === 60 ? selectedQuarterHour === selectedTime : selectedQuarterHour) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <Button 
+                      onClick={handleNext} 
+                      className="w-full h-14 rounded-xl bg-gradient-to-r from-blue-600 via-blue-600 to-purple-600 hover:from-blue-700 hover:via-blue-700 hover:to-purple-700 text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+                    >
+                      <span>Confirmer le créneau</span>
+                      <ChevronRight className="h-4 w-4 ml-2" />
+                    </Button>
+                    <p className="text-xs text-center text-gray-500 mt-2 font-light">
+                      {selectedDate.toLocaleDateString("fr-FR", { 
+                        weekday: "long", 
+                        day: "numeric",
+                        month: "long",
+                        year: "numeric"
+                      })}
                     </p>
                   </motion.div>
                 )}
               </div>
             )}
 
-            {/* Step 4: Profil/Véhicule */}
-            {currentStep === 4 && (
+            {/* Step 4: Profil/Véhicule (ou Step 3 si depuis page détails) */}
+            {(currentStep === 4 && !isFromGarageDetails) || (currentStep === 3 && isFromGarageDetails) ? (
               <div className="space-y-4">
                 <h3 className="font-light mb-4 text-lg">Informations de réservation</h3>
 
@@ -2175,7 +2870,7 @@ function ReservationPageContent() {
                         model: "",
                         license_plate: "",
                         year: "",
-                        fuel_type: "essence"
+                        fuel_type: "",
                       })
                       // Re-sélectionner le premier véhicule de l'utilisateur
                       if (vehicles.length > 0) {
@@ -2502,10 +3197,10 @@ function ReservationPageContent() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
-            {/* Step 5: Récapitulatif */}
-            {currentStep === 5 && (
+            {/* Step 5: Récapitulatif (ou Step 4 si depuis page détails) */}
+            {(currentStep === 5 && !isFromGarageDetails) || (currentStep === 4 && isFromGarageDetails) ? (
               <div className="space-y-4">
                 <h3 className="font-semibold mb-4 text-lg">Récapitulatif</h3>
                 <div className="space-y-3 p-5 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border-2 border-gray-200">
@@ -2525,19 +3220,6 @@ function ReservationPageContent() {
                           {isBookingForSomeoneElse ? otherPersonInfo.license_plate : selectedVehicle?.license_plate}
                         </span>
                       )}
-                      {isBookingForSomeoneElse && (
-                        <span className="block text-xs text-blue-600 font-normal mt-1">
-                          Pour: {otherPersonInfo.first_name} {otherPersonInfo.last_name}
-                        </span>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* Service */}
-                  <div className="flex justify-between items-center pb-3 border-b">
-                    <span className="text-gray-600">Service:</span>
-                    <span className="font-semibold text-gray-900 text-right">
-                      {selectedServiceLabel || selectedService}
                     </span>
                   </div>
 
@@ -2612,31 +3294,31 @@ function ReservationPageContent() {
 
                 <Button
                   onClick={handleSubmit}
-                  className="w-full h-14 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                  className="w-full h-12 sm:h-14 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-base sm:text-lg font-semibold shadow-lg hover:shadow-xl transition-all rounded-xl"
                   disabled={loading}
                 >
                   {loading ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Traitement en cours...
+                      <span className="text-sm sm:text-base">Traitement en cours...</span>
                     </>
                   ) : (
                     <>
-                      <Check className="h-5 w-5 mr-2" />
+                      <Check className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                       Confirmer la réservation
                     </>
                   )}
                 </Button>
 
-                <p className="text-xs text-center text-gray-500 mt-2">
+                <p className="text-xs text-center text-gray-500 mt-2 sm:mt-3 px-2">
                   Vous pourrez modifier ou annuler ce rendez-vous jusqu'à 24h avant la date prévue
                 </p>
               </div>
-            )}
+            ) : null}
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex flex-col sm:flex-row gap-3 mt-6 sm:mt-8">
               {currentStep > 1 && (
-                <Button variant="outline" onClick={handleBack} className="flex-1">
+                <Button variant="outline" onClick={handleBack} className="flex-1 h-11 sm:h-12 text-sm sm:text-base">
                   Retour
                 </Button>
               )}

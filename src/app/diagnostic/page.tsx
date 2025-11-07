@@ -48,7 +48,7 @@ export default function DiagnosticPage() {
     if (!description.trim()) {
       toast({
         title: "Erreur",
-        description: "Veuillez décrire le problème",
+        description: "Veuillez entrer une description",
         variant: "destructive",
       })
       return
@@ -85,21 +85,22 @@ export default function DiagnosticPage() {
         description,
         photos: photoUrls,
         videos: videoUrls,
-        status: "pending",
+        type: "diagnostic",
       })
 
       if (error) throw error
 
       toast({
         title: "Diagnostic envoyé",
-        description: "Votre demande a été enregistrée. Vous recevrez une estimation sous 24h.",
+        description: "Votre demande de diagnostic a été envoyée avec succès",
+        variant: "default",
       })
 
       router.push("/appointments")
     } catch (error: any) {
       toast({
         title: "Erreur",
-        description: error.message || "Une erreur est survenue",
+        description: error.message || "Erreur lors de l'envoi du diagnostic",
         variant: "destructive",
       })
     } finally {
@@ -108,8 +109,8 @@ export default function DiagnosticPage() {
   }
 
   return (
-    <div className="h-full w-full bg-gray-50 overflow-y-auto pb-20 safe-area-top safe-area-bottom">
-      <div className="w-full max-w-2xl mx-auto px-6 py-4">
+    <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gray-50 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
+      <div className="w-full max-w-2xl mx-auto px-4 sm:px-6 py-4 sm:py-6 pb-28 sm:pb-32">
         <Card>
           <CardHeader>
             <CardTitle>Diagnostic</CardTitle>

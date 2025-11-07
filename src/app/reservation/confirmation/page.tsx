@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { CheckCircle, Calendar, MapPin, Car, Clock, Building2, Phone, Mail, Download, ArrowLeft } from "lucide-react"
+import { CheckCircle, Calendar, MapPin, Car, Clock, Building2, Download, ArrowLeft, CreditCard } from "lucide-react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +22,7 @@ function ConfirmationPageContent() {
   const [appointment, setAppointment] = useState<Appointment | null>(null)
   const [garage, setGarage] = useState<Garage | null>(null)
   const [vehicle, setVehicle] = useState<Vehicle | null>(null)
+  const [servicePrice, setServicePrice] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -84,11 +85,96 @@ function ConfirmationPageContent() {
           setVehicle(vehicleData)
         }
       }
+
+      // Charger le prix du service depuis carslink_garage_services
+      // Utiliser la même logique que dans la page de réservation
+      if (appointmentData.garage_id && appointmentData.service_type) {
+        const serviceName = appointmentData.service_type
+        
+        // Mapping des noms de service vers des mots-clés de recherche (même logique que reservation/page.tsx)
+        const serviceKeywords: Record<string, string[]> = {
+          "vidange": ["vidange", "changement d'huile", "huile"],
+          "revision": ["révision", "révision complète", "entretien"],
+          "filtres": ["filtre", "filtres", "changement filtres"],
+          "controle": ["contrôle technique", "préparation contrôle", "contre-visite"],
+          "freinage": ["freinage", "frein", "plaquettes", "disques"],
+          "suspension": ["suspension", "amortisseurs"],
+          "embrayage": ["embrayage", "transmission"],
+          "climatisation": ["climatisation", "clim", "recharge clim"],
+          "batterie": ["batterie", "changement batterie"],
+          "eclairage": ["éclairage", "phare", "ampoule"],
+          "changement_pneus": ["pneus", "montage pneus", "changement pneus"],
+          "equilibrage": ["équilibrage", "parallélisme"],
+          "permutation": ["permutation", "permutation pneus"],
+          "carrosserie": ["carrosserie", "peinture", "réparation carrosserie"],
+          "polissage": ["polissage", "débosselage"],
+          "nettoyage": ["nettoyage", "lavage"],
+          "depannage": ["dépannage", "réparation urgente"],
+          "devis": ["devis"]
+        }
+
+        // Déterminer les keywords à utiliser
+        // Chercher dans les clés du mapping si le service_type correspond
+        let keywords: string[] = []
+        const normalizedServiceType = serviceName.toLowerCase().trim()
+        
+        // Chercher une correspondance dans les clés et combiner les keywords si plusieurs matchs
+        for (const [key, keyWords] of Object.entries(serviceKeywords)) {
+          if (normalizedServiceType.includes(key) || keyWords.some(kw => normalizedServiceType.includes(kw))) {
+            // Combiner les keywords au lieu de remplacer
+            keywords = Array.from(new Set([...keywords, ...keyWords]))
+          }
+        }
+        
+        // Si pas trouvé, utiliser le nom du service comme keyword
+        if (keywords.length === 0) {
+          keywords = [serviceName]
+        }
+
+        const searchQueries = keywords.map(keyword => `name.ilike.%${keyword}%`).join(',')
+
+        // Rechercher le service avec les keywords
+        let { data: servicePriceData, error: priceError } = await supabase
+          .from("carslink_garage_services")
+          .select("price, base_price, name")
+          .eq("garage_id", appointmentData.garage_id)
+          .eq("is_active", true)
+          .or(searchQueries)
+          .limit(1)
+          .maybeSingle()
+
+        // Si aucun résultat, essayer avec le premier keyword seulement
+        if (!servicePriceData && keywords.length > 0) {
+          const { data: fallbackPriceData } = await supabase
+            .from("carslink_garage_services")
+            .select("price, base_price, name")
+            .eq("garage_id", appointmentData.garage_id)
+            .eq("is_active", true)
+            .ilike("name", `%${keywords[0]}%`)
+            .limit(1)
+            .maybeSingle()
+          
+          if (fallbackPriceData) {
+            servicePriceData = fallbackPriceData
+          }
+        }
+
+        if (servicePriceData) {
+          // PRIORITÉ : price (prix fixe) > base_price (fallback)
+          const price = servicePriceData.price != null ? Number(servicePriceData.price) : null
+          const basePrice = servicePriceData.base_price != null ? Number(servicePriceData.base_price) : null
+          
+          if (price != null && !isNaN(price) && price > 0) {
+            setServicePrice(price)
+          } else if (basePrice != null && !isNaN(basePrice) && basePrice > 0) {
+            setServicePrice(basePrice)
+          }
+        }
+      }
     } catch (error: any) {
-      console.error("Error loading appointment:", error)
       showElegantToast({
         title: "Erreur",
-        message: error.message || "Impossible de charger les détails du rendez-vous",
+        message: error.message || "Erreur lors du chargement",
         variant: "error",
       })
       setTimeout(() => router.push("/appointments"), 2000)
@@ -200,23 +286,6 @@ function ConfirmationPageContent() {
     )
   }
 
-  if (!appointment) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-red-600 mb-2">Rendez-vous introuvable</div>
-          <Button
-            variant="outline"
-            onClick={() => router.push("/appointments")}
-            className="mt-4"
-          >
-            Retour aux rendez-vous
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
   if (!appointment || !appointment.start_time || !appointment.end_time) {
     return null
   }
@@ -226,9 +295,9 @@ function ConfirmationPageContent() {
 
   return (
     <>
-      <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-32 safe-area-top safe-area-bottom">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-32 sm:pb-40 safe-area-top safe-area-bottom">
         {/* Mobile Container avec effet Liquid Glass */}
-        <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto pb-32">
+        <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-32 sm:pb-40">
           {/* Header */}
           <div className="px-6 py-6 bg-white/40 backdrop-blur-xl border-b border-white/20">
             <div className="flex items-center gap-4 mb-6">
@@ -246,7 +315,7 @@ function ConfirmationPageContent() {
           </div>
 
           {/* Contenu */}
-          <div className="px-6 py-6 space-y-6 pb-8">
+          <div className="px-4 sm:px-6 py-6 sm:py-8 space-y-4 sm:space-y-6 pb-12 sm:pb-16">
             {/* Message de confirmation */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -284,6 +353,17 @@ function ConfirmationPageContent() {
                   <div className="flex-1">
                     <div className="text-sm text-gray-600 mb-1">Service</div>
                     <div className="font-semibold text-gray-900">{appointment.service_type}</div>
+                    {servicePrice !== null && (
+                      <div className="flex items-center gap-1 mt-2">
+                        <CreditCard className="h-3.5 w-3.5 text-green-600" />
+                        <span className="text-sm font-semibold text-green-600">
+                          {new Intl.NumberFormat("fr-FR", {
+                            style: "currency",
+                            currency: "EUR",
+                          }).format(servicePrice)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -344,14 +424,6 @@ function ConfirmationPageContent() {
                         {garage.city && garage.postal_code && (
                           <div>{garage.postal_code} {garage.city}</div>
                         )}
-                        {garage.phone && (
-                          <div className="flex items-center gap-1">
-                            <Phone className="h-3 w-3" />
-                            <a href={`tel:${garage.phone}`} className="text-blue-600 hover:underline">
-                              {garage.phone}
-                            </a>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -370,11 +442,11 @@ function ConfirmationPageContent() {
             {/* Bouton ajouter au calendrier */}
             <Button
               onClick={handleAddToCalendar}
-              className="w-full h-14 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+              className="w-full h-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm font-medium shadow-md hover:shadow-lg transition-all"
             >
-              <Calendar className="h-5 w-5 mr-2" />
+              <Calendar className="h-4 w-4 mr-2" />
               {isAppleDevice() ? "Ajouter au calendrier Apple" : "Ajouter au calendrier"}
-              <Download className="h-5 w-5 ml-2" />
+              <Download className="h-4 w-4 ml-2" />
             </Button>
 
             {/* Bouton retour */}

@@ -55,20 +55,18 @@ export default function HistoriquePage() {
       const { data, error } = await query.order("start_time", { ascending: false })
 
       if (error) {
-        console.error("Error loading history:", error)
         toast({
           title: "Erreur",
-          description: "Impossible de charger l'historique",
+          description: "Erreur lors du chargement de l'historique",
           variant: "destructive",
         })
       } else if (data) {
         setAppointments(data)
       }
     } catch (error: any) {
-      console.error("Error loading history:", error)
       toast({
         title: "Erreur",
-        description: error.message || "Une erreur est survenue",
+        description: "Erreur lors du chargement de l'historique",
         variant: "destructive",
       })
     } finally {
@@ -95,11 +93,11 @@ export default function HistoriquePage() {
 
   return (
     <>
-      <div className="h-full w-full bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 overflow-y-auto pb-20 safe-area-top safe-area-bottom">
+      <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
         {/* Mobile Container avec effet Liquid Glass */}
-        <div className="w-full h-full bg-white/70 backdrop-blur-2xl overflow-y-auto">
+        <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-28 sm:pb-32">
           {/* Header avec verre givré */}
-          <div className="px-6 py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
+          <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
             <div className="flex items-center gap-4 mb-6">
               <Button
                 variant="ghost"
@@ -138,8 +136,11 @@ export default function HistoriquePage() {
             Annulés
           </Button>
         </div>
+          </div>
 
-          {appointments.length > 0 ? (
+          {/* Contenu */}
+          <div className="px-4 sm:px-6 py-6 sm:py-8 pb-28 sm:pb-32 bg-white/30 backdrop-blur-sm">
+            {appointments.length > 0 ? (
             <div className="space-y-3">
               {appointments.map((appointment) => (
                 <motion.div

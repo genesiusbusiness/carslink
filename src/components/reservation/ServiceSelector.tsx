@@ -16,99 +16,11 @@ import { Badge } from "@/components/ui/badge"
 
 interface ServiceOption {
   id: string
-  label: string
-  icon: any
-}
-
-interface ServiceCategory {
-  id: string
-  label: string
-  icon: any
-  services: ServiceOption[]
-}
-
-const SERVICE_CATEGORIES: ServiceCategory[] = [
-  {
-    id: "entretien",
-    label: "Entretien et révision",
-    icon: Wrench,
-    services: [
-      { id: "vidange", label: "Vidange & entretien", icon: Droplet },
-      { id: "revision", label: "Révision constructeur complète", icon: Gauge },
-      { id: "filtres", label: "Changement filtres (huile, air, carburant)", icon: Filter },
-      { id: "controle", label: "Préparation contrôle technique", icon: Car },
-    ]
-  },
-  {
-    id: "reparations",
-    label: "Réparations mécaniques",
-    icon: Settings,
-    services: [
-      { id: "freinage", label: "Freinage (plaquettes, disques, liquide)", icon: CircleDot },
-      { id: "suspension", label: "Suspension & amortisseurs", icon: Car },
-      { id: "embrayage", label: "Embrayage & transmission", icon: Settings },
-      { id: "moteur", label: "Moteur / diagnostic électronique", icon: Gauge },
-    ]
-  },
-  {
-    id: "electricite",
-    label: "Électricité & confort",
-    icon: Zap,
-    services: [
-      { id: "climatisation", label: "Climatisation (recharge / nettoyage)", icon: Wind },
-      { id: "batterie", label: "Batterie (test / remplacement)", icon: Battery },
-      { id: "electricite", label: "Électricité / phares / vitres", icon: Zap },
-      { id: "accessoires", label: "Installation accessoires (autoradio, caméra, attelage)", icon: Radio },
-    ]
-  },
-  {
-    id: "pneus",
-    label: "Pneus et roues",
-    icon: Circle,
-    services: [
-      { id: "changement_pneus", label: "Changement de pneus", icon: Circle },
-      { id: "equilibrage", label: "Équilibrage / parallélisme", icon: Circle },
-      { id: "permutation", label: "Permutation pneus été / hiver", icon: Circle },
-    ]
-  },
-  {
-    id: "carrosserie",
-    label: "Carrosserie & esthétique",
-    icon: Car,
-    services: [
-      { id: "carrosserie", label: "Carrosserie / peinture", icon: Car },
-      { id: "polissage", label: "Polissage / débosselage", icon: Car },
-      { id: "nettoyage", label: "Nettoyage intérieur / extérieur", icon: Car },
-    ]
-  },
-  {
-    id: "urgences",
-    label: "Services rapides & urgences",
-    icon: Clock,
-    services: [
-      { id: "depannage", label: "Réparation urgente / dépannage", icon: Clock },
-      { id: "devis", label: "Devis uniquement (sans réparation immédiate)", icon: Car },
-    ]
-  }
-]
-
-interface ServiceSelectorProps {
-  selectedService: string
-  onSelectService: (serviceId: string, serviceLabel: string) => void
-  additionalOptions?: {
-    courtesyVehicle: boolean
-    homePickup: boolean
-    expressBooking: boolean
-  }
-  onAdditionalOptionsChange?: (options: {
-    courtesyVehicle: boolean
-    homePickup: boolean
-    expressBooking: boolean
-  }) => void
   otherServiceDescription?: string
   onOtherServiceChange?: (description: string) => void
   otherServiceFiles?: File[]
   onOtherServiceFilesChange?: (files: File[]) => void
+  servicePrices?: Record<string, number | null> // Prix par service ID
 }
 
 export function ServiceSelector({
@@ -116,197 +28,110 @@ export function ServiceSelector({
   onSelectService,
   additionalOptions = {
     courtesyVehicle: false,
-    homePickup: false,
-    expressBooking: false,
   },
   onAdditionalOptionsChange,
   otherServiceDescription = "",
   onOtherServiceChange,
   otherServiceFiles = [],
   onOtherServiceFilesChange,
-}: ServiceSelectorProps) {
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null)
+  servicePrices,
+}: {
+  selectedService: string
+  onSelectService: (serviceId: string, serviceLabel: string) => void
+  additionalOptions?: {
+    courtesyVehicle: boolean
+    pickupService?: boolean
+    homePickup?: boolean
+    expressBooking?: boolean
+    otherService?: boolean
+  }
+  onAdditionalOptionsChange?: (options: { courtesyVehicle: boolean; pickupService?: boolean; homePickup?: boolean; expressBooking?: boolean; otherService?: boolean }) => void
+  otherServiceDescription?: string
+  onOtherServiceChange?: (description: string) => void
+  otherServiceFiles?: File[]
+  onOtherServiceFilesChange?: (files: File[]) => void
+  servicePrices?: Record<string, number | null>
+}) {
   const [showOtherService, setShowOtherService] = useState(false)
+  const [otherServiceDesc, setOtherServiceDesc] = useState(otherServiceDescription)
+  const [otherFiles, setOtherFiles] = useState<File[]>(otherServiceFiles)
 
   const handleServiceClick = (serviceId: string, serviceLabel: string) => {
-    if (serviceId === "autre") {
-      setShowOtherService(true)
-      onSelectService(serviceId, serviceLabel)
-    } else {
-      setShowOtherService(false)
-      onSelectService(serviceId, serviceLabel)
-      // Fermer les catégories quand un service est sélectionné
-      setExpandedCategory(null)
-    }
+    onSelectService(serviceId, serviceLabel)
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && onOtherServiceFilesChange) {
-      const files = Array.from(e.target.files)
-      onOtherServiceFilesChange([...otherServiceFiles, ...files])
-    }
+    const files = Array.from(e.target.files || [])
+    const newFiles = [...otherFiles, ...files]
+    setOtherFiles(newFiles)
+    onOtherServiceFilesChange?.(newFiles)
   }
 
   const removeFile = (index: number) => {
-    if (onOtherServiceFilesChange) {
-      const newFiles = otherServiceFiles.filter((_, i) => i !== index)
-      onOtherServiceFilesChange(newFiles)
-    }
+    const newFiles = otherFiles.filter((_, i) => i !== index)
+    setOtherFiles(newFiles)
+    onOtherServiceFilesChange?.(newFiles)
   }
 
-  const getSelectedServiceLabel = () => {
-    if (selectedService === "autre") return "Autre (décrire le problème)"
-    
-    for (const category of SERVICE_CATEGORIES) {
-      const service = category.services.find(s => s.id === selectedService)
-      if (service) return service.label
-    }
-    return selectedService
-  }
+  const services = [
+    { id: "revision", label: "Révision", icon: Wrench, price: servicePrices?.revision },
+    { id: "vidange", label: "Vidange", icon: Droplet, price: servicePrices?.vidange },
+    { id: "freinage", label: "Freinage", icon: CircleDot, price: servicePrices?.freinage },
+    { id: "climatisation", label: "Climatisation", icon: Wind, price: servicePrices?.climatisation },
+  ]
 
   return (
     <div className="space-y-4">
-      {/* Affichage du service sélectionné */}
-      {selectedService && !showOtherService && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl border-2 border-blue-200 shadow-md"
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
-                <Wrench className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <div className="font-semibold text-gray-900">Service sélectionné</div>
-                <div className="text-sm text-gray-600">{getSelectedServiceLabel()}</div>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                onSelectService("", "")
-                setShowOtherService(false)
-              }}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Catégories de services */}
-      <div className="space-y-3">
-        {SERVICE_CATEGORIES.map((category) => {
-          const Icon = category.icon
-          const isExpanded = expandedCategory === category.id
+      <div className="grid grid-cols-2 gap-3">
+        {services.map((service) => {
+          const isSelected = selectedService === service.id
+          const Icon = service.icon
 
           return (
             <motion.div
-              key={category.id}
+              key={service.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.3 }}
             >
               <Card
-                className={`border-2 transition-all duration-300 ${
-                  isExpanded
-                    ? "border-blue-300 shadow-lg bg-gradient-to-br from-blue-50/50 to-purple-50/50"
-                    : "border-gray-200 hover:border-gray-300 hover:shadow-md"
+                className={`border-2 cursor-pointer transition-all ${
+                  isSelected
+                    ? "border-blue-500 bg-blue-50 shadow-md"
+                    : "border-gray-200 hover:border-gray-300"
                 }`}
               >
                 <CardContent className="p-0">
                   <button
-                    onClick={() => setExpandedCategory(isExpanded ? null : category.id)}
-                    className="w-full p-4 flex items-center justify-between"
+                    onClick={() => handleServiceClick(service.id, service.label)}
+                    className="w-full p-4 flex flex-col items-center gap-2"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                        <Icon className="h-5 w-5 text-white" />
-                      </div>
-                      <span className="font-semibold text-gray-900 text-left">
-                        {category.label}
-                      </span>
-                    </div>
-                    <motion.div
-                      animate={{ rotate: isExpanded ? 90 : 0 }}
-                      transition={{ duration: 0.2 }}
+                    <div
+                      className={`h-12 w-12 rounded-lg flex items-center justify-center ${
+                        isSelected
+                          ? "bg-gradient-to-br from-blue-600 to-purple-600"
+                          : "bg-gray-100"
+                      }`}
                     >
-                      <ArrowRight className="h-5 w-5 text-gray-400" />
-                    </motion.div>
-                  </button>
-
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-4 pb-4 space-y-2 border-t border-gray-200 pt-4">
-                          {category.services.map((service) => {
-                            const ServiceIcon = service.icon
-                            const isSelected = selectedService === service.id
-
-                            return (
-                              <motion.button
-                                key={service.id}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleServiceClick(service.id, service.label)
-                                }}
-                                className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 ${
-                                  isSelected
-                                    ? "border-blue-500 bg-blue-50 shadow-md backdrop-blur-sm bg-opacity-80 ring-2 ring-blue-200"
-                                    : "border-gray-200 hover:border-blue-300 hover:bg-blue-50/50"
-                                }`}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div
-                                    className={`h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                                      isSelected
-                                        ? "bg-gradient-to-br from-blue-600 to-purple-600"
-                                        : "bg-gray-100"
-                                    }`}
-                                  >
-                                    <ServiceIcon
-                                      className={`h-4 w-4 ${
-                                        isSelected ? "text-white" : "text-gray-600"
-                                      }`}
-                                    />
-                                  </div>
-                                  <span
-                                    className={`font-medium ${
-                                      isSelected ? "text-blue-900" : "text-gray-900"
-                                    }`}
-                                  >
-                                    {service.label}
-                                  </span>
-                                  {isSelected && (
-                                    <motion.div
-                                      initial={{ scale: 0 }}
-                                      animate={{ scale: 1 }}
-                                      className="ml-auto"
-                                    >
-                                      <div className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center">
-                                        <div className="h-2 w-2 rounded-full bg-white" />
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </div>
-                              </motion.button>
-                            )
-                          })}
-                        </div>
-                      </motion.div>
+                      <Icon
+                        className={`h-6 w-6 ${
+                          isSelected ? "text-white" : "text-gray-600"
+                        }`}
+                      />
+                    </div>
+                    <span
+                      className={`font-semibold text-sm ${
+                        isSelected ? "text-blue-900" : "text-gray-900"
+                      }`}
+                    >
+                      {service.label}
+                    </span>
+                    {service.price && (
+                      <Badge variant="secondary" className="text-xs">
+                        {service.price.toFixed(0)}€
+                      </Badge>
                     )}
-                  </AnimatePresence>
+                  </button>
                 </CardContent>
               </Card>
             </motion.div>
@@ -373,14 +198,17 @@ export function ServiceSelector({
                       Décrivez votre problème
                     </label>
                     <textarea
-                      value={otherServiceDescription}
-                      onChange={(e) => onOtherServiceChange?.(e.target.value)}
+                      value={otherServiceDesc}
+                      onChange={(e) => {
+                        setOtherServiceDesc(e.target.value)
+                        onOtherServiceChange?.(e.target.value)
+                      }}
                       placeholder="Décrivez en détail le problème ou le service dont vous avez besoin..."
                       className="w-full h-32 px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                       maxLength={1000}
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      {otherServiceDescription.length}/1000
+                      {otherServiceDesc.length}/1000
                     </p>
                   </div>
 
@@ -403,9 +231,9 @@ export function ServiceSelector({
                         />
                       </label>
 
-                      {otherServiceFiles.length > 0 && (
+                      {otherFiles.length > 0 && (
                         <div className="grid grid-cols-3 gap-2">
-                          {otherServiceFiles.map((file, index) => (
+                          {otherFiles.map((file, index) => (
                             <div
                               key={index}
                               className="relative aspect-square rounded-lg overflow-hidden border-2 border-gray-200 group"
@@ -438,7 +266,7 @@ export function ServiceSelector({
                   </div>
                   
                   {/* Bouton continuer pour service "autre" */}
-                  {showOtherService && otherServiceDescription.trim().length > 10 && (
+                  {showOtherService && otherServiceDesc.trim().length > 10 && (
                     <div className="mt-4 pt-4 border-t border-gray-200">
                       <Button
                         onClick={() => {
@@ -469,30 +297,19 @@ export function ServiceSelector({
               label: "Véhicule de courtoisie",
               icon: CarIcon,
             },
-            {
-              id: "homePickup",
-              label: "Prise à domicile / livraison",
-              icon: Home,
-            },
-            {
-              id: "expressBooking",
-              label: "Réservation express (urgence 24h)",
-              icon: Clock,
-            },
           ].map((option) => {
+            const isChecked = additionalOptions?.courtesyVehicle || false
             const Icon = option.icon
-            const isChecked = additionalOptions[option.id as keyof typeof additionalOptions]
 
             return (
               <motion.button
                 key={option.id}
                 onClick={() => {
-                  if (onAdditionalOptionsChange) {
-                    onAdditionalOptionsChange({
-                      ...additionalOptions,
-                      [option.id]: !isChecked,
-                    })
+                  const newOptions = {
+                    ...additionalOptions,
+                    courtesyVehicle: !isChecked,
                   }
+                  onAdditionalOptionsChange?.(newOptions)
                 }}
                 className={`w-full p-3 rounded-xl border-2 text-left transition-all duration-200 ${
                   isChecked

@@ -6,10 +6,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
-// Configuration Supabase directement dans le code
-// La fonction get_app_setting est SECURITY DEFINER donc accessible même avec anon key
-const supabaseUrl = 'https://yxkbvhymsvasknslhpsa.supabase.co'
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzI1MjQsImV4cCI6MjA3NzI0ODUyNH0.zbE1YiXZXDEgpLkRS9XDU8yt4n4EiQItU_YSoEQveTM'
+// Configuration Supabase via variables d'environnement
+// ⚠️ IMPORTANT : Ne jamais hardcoder les clés dans le code source
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yxkbvhymsvasknslhpsa.supabase.co'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NzI1MjQsImV4cCI6MjA3NzI0ODUyNH0.zbE1YiXZXDEgpLkRS9XDU8yt4n4EiQItU_YSoEQveTM'
+
+if (!supabaseAnonKey) {
+  throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is not set in environment variables')
+}
 
 // Client pour les appels serveur
 // Utilise l'anon key - get_app_setting est SECURITY DEFINER donc ça fonctionne
@@ -33,24 +37,17 @@ interface OpenCageResponse {
   }
 }
 
-/**
- * Récupère la clé API OpenCage depuis la base de données
- * Utilise la fonction RPC get_app_setting qui est SECURITY DEFINER
- */
 async function getOpenCageApiKey(): Promise<string | null> {
   try {
-    const { data, error } = await supabaseServer.rpc("get_app_setting", {
-      p_key: "opencage_api_key",
-    })
+    const { data, error } = await supabaseServer
+      .rpc('get_app_setting', { setting_key: 'opencage_api_key' })
 
     if (error) {
-      console.error("Erreur lors de la récupération de la clé API OpenCage:", error)
       return null
     }
 
     return data || null
   } catch (error) {
-    console.error("Erreur lors de la récupération de la clé API OpenCage:", error)
     return null
   }
 }
@@ -96,9 +93,6 @@ export async function POST(request: NextRequest) {
 
     const response = await fetch(url, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
     })
 
     if (!response.ok) {
@@ -141,7 +135,6 @@ export async function POST(request: NextRequest) {
       longitude: lng,
     })
   } catch (error: any) {
-    console.error("Geocoding error:", error)
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }

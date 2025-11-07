@@ -38,6 +38,20 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
+    /* Base font size pour mobile - légèrement réduit pour donner plus d'espace */
+    font-size: 14px;
+  }
+  
+  @media (min-width: 375px) {
+    html {
+      font-size: 15px;
+    }
+  }
+  
+  @media (min-width: 768px) {
+    html {
+      font-size: 16px;
+    }
   }
   
   body {
@@ -53,6 +67,8 @@
     touch-action: pan-y pinch-zoom;
     /* Empêcher le pull-to-refresh sur iOS */
     overscroll-behavior-y: none;
+    /* Base line height pour meilleure lisibilité */
+    line-height: 1.6;
   }
   
   #__next {
@@ -60,6 +76,45 @@
     width: 100%;
     margin: 0;
     padding: 0;
+  }
+  
+  /* Container responsive par défaut */
+  .container-responsive {
+    width: 100%;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  @media (min-width: 375px) {
+    .container-responsive {
+      padding-left: 1.25rem;
+      padding-right: 1.25rem;
+    }
+  }
+  
+  @media (min-width: 640px) {
+    .container-responsive {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+      max-width: 640px;
+    }
+  }
+  
+  @media (min-width: 768px) {
+    .container-responsive {
+      padding-left: 2rem;
+      padding-right: 2rem;
+      max-width: 768px;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    .container-responsive {
+      max-width: 1024px;
+    }
   }
 }
 

@@ -24,7 +24,7 @@ export function BottomNavigation() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-200 px-6 py-4 shadow-lg z-50 safe-area-bottom">
+    <div className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 shadow-lg z-50 safe-area-bottom">
       <div className="flex items-center justify-around max-w-[428px] mx-auto">
         {navItems.map((item, index) => {
           const Icon = item.icon
@@ -40,7 +40,7 @@ export function BottomNavigation() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
             >
-              <div className="relative p-3 rounded-full transition-all duration-200">
+              <div className="relative p-2.5 sm:p-3 rounded-full transition-all duration-200">
                 {active && (
                   <motion.div
                     layoutId="activeTab"
@@ -50,7 +50,7 @@ export function BottomNavigation() {
                 )}
                 <Icon
                   className={cn(
-                    "relative h-6 w-6 z-10 transition-all duration-200",
+                    "relative h-5 w-5 sm:h-6 sm:w-6 z-10 transition-all duration-200",
                     active ? "text-white" : "text-gray-400"
                   )}
                 />
