@@ -5,8 +5,8 @@ frontend:
       commands:
         - node -v
         - npm -v
-        - npm ci
-        - npm list tailwindcss postcss autoprefixer || echo "Warning - Some dependencies may be missing"
+        - npm ci --legacy-peer-deps
+        - npm list typescript tailwindcss postcss autoprefixer || true
     build:
       commands:
         - npm run build
