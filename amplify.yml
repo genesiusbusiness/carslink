@@ -3,9 +3,16 @@ frontend:
   phases:
     preBuild:
       commands:
+        # Vérifier la version de Node.js
+        - node -v
+        - npm -v
+        # Installer les dépendances (inclut devDependencies pour le build)
         - npm ci
+        # Vérifier que les dépendances critiques sont installées
+        - npm list tailwindcss postcss autoprefixer || echo "Warning: Some dependencies may be missing"
     build:
       commands:
+        # Build de production Next.js
         - npm run build
   artifacts:
     baseDirectory: .next
