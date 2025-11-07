@@ -52,11 +52,51 @@ export default function ProfilePage() {
       }
 
       // Charger les véhicules
-      const { data: vehiclesData, error: vehiclesError } = await supabase
-        .from("vehicles")
-        .select("*")
-        .eq("flynesis_user_id", user.id)
-        .order("created_at", { ascending: false })
+      // Récupérer d'abord le fly_accounts.id
+      const { data: flyAccount, error: flyAccountError } = await supabase
+        .from("fly_accounts")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+
+      let vehiclesData = null
+      let vehiclesError = null
+
+      if (!flyAccountError && flyAccount?.id) {
+        // Utiliser fly_accounts.id pour charger les véhicules
+        const result = await supabase
+          .from("vehicles")
+          .select("*")
+          .eq("flynesis_user_id", flyAccount.id)
+          .order("created_at", { ascending: false })
+        
+        vehiclesData = result.data
+        vehiclesError = result.error
+
+        // Si aucun véhicule trouvé avec flyAccount.id, essayer avec user.id (anciens véhicules)
+        if (!vehiclesError && (!vehiclesData || vehiclesData.length === 0)) {
+          const fallbackResult = await supabase
+            .from("vehicles")
+            .select("*")
+            .eq("flynesis_user_id", user.id)
+            .order("created_at", { ascending: false })
+          
+          if (!fallbackResult.error && fallbackResult.data) {
+            vehiclesData = fallbackResult.data
+            vehiclesError = fallbackResult.error
+          }
+        }
+      } else {
+        // Si pas de fly_accounts, essayer avec user.id directement
+        const result = await supabase
+          .from("vehicles")
+          .select("*")
+          .eq("flynesis_user_id", user.id)
+          .order("created_at", { ascending: false })
+        
+        vehiclesData = result.data
+        vehiclesError = result.error
+      }
 
       if (vehiclesError) {
         console.error("Error loading vehicles:", vehiclesError)

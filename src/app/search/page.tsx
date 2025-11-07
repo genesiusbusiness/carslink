@@ -255,12 +255,13 @@ function SearchPageContent() {
   // Obtenir la distance en kilomètres pour le tri
   const getDistanceInKm = (garage: Garage): number | null => {
     if (!userPosition || !garage.latitude || !garage.longitude) return null
-    return calculateDistance(
+    const distanceMeters = calculateDistance(
       userPosition.latitude,
       userPosition.longitude,
       garage.latitude,
       garage.longitude
     )
+    return distanceMeters / 1000 // Convertir mètres en kilomètres
   }
 
   // Calculer le nombre de jours disponibles pour un garage dans les 90 prochains jours

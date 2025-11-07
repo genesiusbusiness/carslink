@@ -39,12 +39,32 @@ export default function ServicesPage() {
   const loadServices = async () => {
     setLoading(true)
     try {
+      console.log('🔍 Chargement des services...')
       const { data, error } = await supabase
         .from("carslink_garage_services")
-        .select("name, description, section_name, icon, garage_id")
+        .select(`
+          name,
+          description,
+          garage_id,
+          section:carslink_service_sections (
+            name,
+            icon
+          )
+        `)
         .eq("is_active", true)
 
-      if (error) throw error
+      if (error) {
+        console.error("❌ Erreur lors du chargement des services:", error)
+        console.error("Détails:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
+        throw error
+      }
+
+      console.log('✅ Services chargés:', data?.length || 0)
 
       // Grouper par nom de service et compter les garages
       const servicesMap = new Map<string, { name: string; description?: string | null; section_name?: string | null; icon?: string | null; garage_ids: Set<string> }>()
@@ -53,13 +73,16 @@ export default function ServicesPage() {
         for (const service of data) {
           const serviceName = service.name
           const garageId = service.garage_id
+          const section = Array.isArray(service.section) ? service.section[0] : service.section
+          const sectionName = section?.name || null
+          const sectionIcon = section?.icon || null
 
           if (!servicesMap.has(serviceName)) {
             servicesMap.set(serviceName, {
               name: serviceName,
               description: service.description,
-              section_name: service.section_name,
-              icon: service.icon,
+              section_name: sectionName,
+              icon: sectionIcon,
               garage_ids: new Set(),
             })
           }

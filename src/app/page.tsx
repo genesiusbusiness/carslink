@@ -54,10 +54,13 @@ export default function HomePage() {
 
   const initializeGeolocation = async () => {
     setLocationStatus('loading')
+    console.log("📍 Initialisation de la géolocalisation...")
     const position = await getUserPosition()
+    console.log("📍 Position obtenue:", position)
     setUserPosition(position)
     
     if (!position) {
+      console.warn("⚠️ Géolocalisation refusée ou indisponible")
       setLocationStatus('denied')
       // Ne pas charger les garages si la géolocalisation est refusée
       setGarages([])
@@ -66,6 +69,7 @@ export default function HomePage() {
     }
     
     setLocationStatus(position.source === 'gps' ? 'success' : 'default')
+    console.log("✅ Géolocalisation réussie, chargement des garages...")
     // Charger les garages une fois la position obtenue
     loadGarages(position)
   }
@@ -98,10 +102,10 @@ export default function HomePage() {
           }
         }, 2000)
       } else if (error) {
-        // Erreur lors du chargement du profil
+        console.error("❌ Erreur lors du chargement du profil:", error)
       }
     } catch (err) {
-      // Error in loadProfile
+      console.error("❌ Erreur dans loadProfile:", err)
     }
   }
 
@@ -148,16 +152,20 @@ export default function HomePage() {
       }
 
       if (error) {
+        console.error("❌ Erreur lors du chargement des garages:", error)
         setGarages([])
         setLoadingGarages(false)
         return
       }
 
       if (!allGarages || allGarages.length === 0) {
+        console.warn("⚠️ Aucun garage trouvé dans la base de données")
         setGarages([])
         setLoadingGarages(false)
         return
       }
+
+      console.log("✅ Garages chargés:", allGarages.length)
 
 
       // Géocoder les garages sans coordonnées
@@ -223,18 +231,20 @@ export default function HomePage() {
       })
 
 
-      // Enlever la propriété distance temporaire pour le type
-      const finalGarages = garagesWithCoords.map(({ distance, ...garage }) => ({
+      // Conserver la distance dans les garages
+      const finalGarages = garagesWithCoords.map((garage) => ({
         ...garage,
+        distance: garage.distance, // Conserver la distance
       }))
 
+      console.log("✅ Garages avec distances:", finalGarages.length)
       setGarages(finalGarages as any)
       
       // Charger le nombre d'avis pour ces garages
       const garageIds = finalGarages.map((g: any) => g.id)
       await loadGaragesReviewsCount(garageIds)
     } catch (error) {
-      // Error loading garages
+      console.error("❌ Erreur dans loadGarages:", error)
       setGarages([])
     } finally {
       setLoadingGarages(false)
@@ -311,6 +321,7 @@ export default function HomePage() {
         setCurrentAppointment(null)
       }
     } catch (error) {
+      console.error("❌ Erreur dans loadCurrentAppointment:", error)
       setCurrentAppointment(null)
     } finally {
       setLoadingAppointments(false)
@@ -345,7 +356,7 @@ export default function HomePage() {
         setNotifications(data || [])
       }
     } catch (error) {
-      // Error loading notifications
+      console.error("❌ Erreur dans loadNotifications:", error)
     }
   }
 
@@ -583,38 +594,52 @@ export default function HomePage() {
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
                         onClick={() => setShowNotifications(false)}
-                        className="fixed inset-0 z-[50] bg-black/20 backdrop-blur-sm"
+                        className="fixed inset-0 z-[9999] bg-black/85 backdrop-blur-lg pointer-events-auto"
+                        style={{ 
+                          position: 'fixed',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          width: '100vw',
+                          height: '100vh',
+                          zIndex: 9999,
+                          backgroundColor: 'rgba(0, 0, 0, 0.85)'
+                        }}
                       />
                       <motion.div
                         initial={{ opacity: 0, scale: 0.95, y: -10 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                        className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] z-[60] bg-white/95 backdrop-blur-xl rounded-2xl border border-white/50 shadow-xl overflow-hidden"
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="fixed right-4 top-20 w-72 max-w-[calc(100vw-2rem)] z-[10000] bg-white/95 backdrop-blur-lg rounded-2xl border border-gray-200/50 shadow-2xl shadow-black/30 overflow-hidden pointer-events-auto"
                       >
-                        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                          <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
+                        <div className="px-3 py-2 border-b border-gray-100/80 flex items-center justify-between bg-gradient-to-r from-gray-50/50 to-white">
+                          <h3 className="text-xs font-semibold text-gray-800">Notifications</h3>
                           <motion.button
                             onClick={(e) => {
                               e.stopPropagation()
                               setShowNotifications(false)
                             }}
-                            className="h-6 w-6 rounded-full hover:bg-gray-100 flex items-center justify-center transition-colors"
+                            className="h-5 w-5 rounded-full hover:bg-gray-200/60 flex items-center justify-center transition-colors"
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
                           >
-                            <X className="h-4 w-4 text-gray-500" />
+                            <X className="h-3 w-3 text-gray-500" />
                           </motion.button>
                         </div>
-                        <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                        <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
                           {notifications.length > 0 ? (
-                            <div className="divide-y divide-gray-100">
+                            <div className="divide-y divide-gray-100/60">
                               {notifications.slice(0, 5).map((notification) => (
                                 <motion.div
                                   key={notification.id}
-                                  initial={{ opacity: 0, y: 10 }}
+                                  initial={{ opacity: 0, y: 5 }}
                                   animate={{ opacity: 1, y: 0 }}
-                                  className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                                  className="px-3 py-2.5 hover:bg-gray-50/80 transition-colors cursor-pointer group"
                                   onClick={() => {
                                     if (notification.link) {
                                       router.push(notification.link)
@@ -622,40 +647,40 @@ export default function HomePage() {
                                     setShowNotifications(false)
                                   }}
                                 >
-                                  <div className="flex items-start gap-3">
-                                    <div className={`h-2 w-2 rounded-full mt-2 flex-shrink-0 ${!notification.read ? 'bg-blue-600' : 'bg-transparent'}`} />
+                                  <div className="flex items-start gap-2.5">
+                                    <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${!notification.read ? 'bg-violet-500 shadow-sm shadow-violet-500/50' : 'bg-transparent'}`} />
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-sm font-medium text-gray-900 mb-1 line-clamp-1">{notification.title}</p>
-                                      <p className="text-xs text-gray-500 font-light line-clamp-2">{notification.message}</p>
+                                      <p className="text-xs font-semibold text-gray-900 mb-0.5 line-clamp-1 leading-tight">{notification.title}</p>
+                                      <p className="text-[11px] text-gray-500 font-light line-clamp-2 leading-snug">{notification.message}</p>
                                     </div>
                                   </div>
                                 </motion.div>
                               ))}
                             </div>
                           ) : (
-                            <div className="p-8 text-center flex items-center justify-center min-h-[200px]">
+                            <div className="p-6 text-center flex items-center justify-center min-h-[150px]">
                               <div>
-                                <Bell className="h-10 w-10 text-gray-300 mx-auto mb-2" />
-                                <p className="text-sm text-gray-600 font-medium mb-1">Aucune notification</p>
-                                <p className="text-xs text-gray-500 font-light">Vous n'avez pas encore de notifications</p>
+                                <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                                <p className="text-xs text-gray-600 font-medium mb-0.5">Aucune notification</p>
+                                <p className="text-[11px] text-gray-400 font-light">Vous n'avez pas encore de notifications</p>
                               </div>
                             </div>
                           )}
                         </div>
                         {notifications.length > 0 && (
-                          <div className="relative p-2 border-t border-gray-200 bg-gray-50/50 flex-shrink-0">
+                          <div className="relative px-2 py-1.5 border-t border-gray-100/80 bg-gradient-to-r from-gray-50/30 to-white flex-shrink-0">
                             <motion.button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 router.push('/notifications')
                                 setShowNotifications(false)
                               }}
-                              className="w-full py-1.5 px-3 text-[11px] text-blue-600 font-medium hover:text-blue-700 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-1"
-                              whileHover={{ scale: 1.01 }}
-                              whileTap={{ scale: 0.99 }}
+                              className="w-full py-1.5 px-2.5 text-[10px] text-violet-600 font-semibold hover:text-violet-700 rounded-md hover:bg-violet-50/60 transition-colors flex items-center justify-center gap-1"
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
                             >
                               <span>Voir toutes</span>
-                              <ChevronRight className="h-3 w-3" />
+                              <ChevronRight className="h-2.5 w-2.5" />
                             </motion.button>
                           </div>
                         )}
@@ -1079,12 +1104,12 @@ export default function HomePage() {
                                     <MapPin className="h-3 w-3" />
                                     <span>{garage.city}</span>
                                   </div>
-                                  {(garage as any)._distance !== undefined && <span>•</span>}
+                                  {(garage as any).distance !== undefined && <span>•</span>}
                                 </>
                               )}
-                              {(garage as any)._distance !== undefined && (
+                              {(garage as any).distance !== undefined && (
                                 <span className="text-blue-600 font-medium">
-                                  à {formatDistance((garage as any)._distance)}
+                                  à {formatDistance((garage as any).distance)}
                                 </span>
                               )}
                             </div>

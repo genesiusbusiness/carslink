@@ -112,26 +112,26 @@ function SwipeableNotification({
         onDragStart={onSwipeStart}
         onDragEnd={handleDragEnd}
         style={{ x, opacity }}
-        className={`relative bg-white/60 backdrop-blur-xl border border-white/40 rounded-2xl p-4 shadow-[0_4px_20px_rgba(0,0,0,0.08)] cursor-pointer hover:shadow-[0_12px_40px_rgba(59,130,246,0.2)] transition-all duration-300 ${
-          !notification.read ? "ring-2 ring-blue-500/30" : ""
+        className={`relative bg-white/70 backdrop-blur-xl border border-gray-200/50 rounded-xl p-3 shadow-sm cursor-pointer hover:shadow-md hover:border-violet-300/50 transition-all duration-200 ${
+          !notification.read ? "ring-1 ring-violet-400/30 bg-violet-50/30" : ""
         }`}
         onClick={onClick}
       >
-        <div className="flex items-start gap-3">
-          <div className={`h-3 w-3 rounded-full mt-1.5 flex-shrink-0 ${
-            !notification.read ? "bg-blue-600" : "bg-transparent"
+        <div className="flex items-start gap-2.5">
+          <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+            !notification.read ? "bg-violet-500 shadow-sm shadow-violet-500/50" : "bg-transparent"
           }`} />
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <p className="text-sm font-light text-gray-900">
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <p className="text-xs font-semibold text-gray-900 leading-tight">
                 {notification.title}
               </p>
             </div>
-            <p className="text-sm text-gray-600 font-light mb-3">
+            <p className="text-[11px] text-gray-600 font-light mb-2 leading-snug line-clamp-2">
               {notification.message}
             </p>
-            <div className="flex items-center gap-2 text-xs text-gray-400 font-light">
-              <Calendar className="h-3 w-3" />
+            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-light">
+              <Calendar className="h-2.5 w-2.5" />
               <span>
                 {notification.created_at ? new Date(notification.created_at).toLocaleDateString("fr-FR", {
                   day: "numeric",

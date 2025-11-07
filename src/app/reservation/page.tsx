@@ -669,83 +669,35 @@ function ReservationPageContent() {
         return
       }
 
-
-      // Mapping des IDs de service vers des mots-clés de recherche dans la base
-      const serviceKeywords: Record<string, string[]> = {
-        "vidange": ["vidange", "changement d'huile", "huile", "vidange moteur"],
-        "revision": ["révision", "révision complète", "entretien", "révision constructeur"],
-        "filtres": ["filtre", "filtres", "changement filtres", "filtre huile", "filtre air", "filtre carburant"],
-        "controle": ["contrôle technique", "préparation contrôle", "contre-visite", "controle technique"],
-        "freinage": ["freinage", "frein", "plaquettes", "disques", "plaquette", "disque"],
-        "suspension": ["suspension", "amortisseurs", "amortisseur"],
-        "embrayage": ["embrayage", "transmission"],
-        "moteur": ["moteur", "diagnostic", "diagnostic électronique", "réparation moteur"],
-        "climatisation": ["climatisation", "recharge climatisation", "clim", "recharge clim"],
-        "batterie": ["batterie", "test batterie", "changement batterie"],
-        "electricite": ["électricité", "phares", "vitres", "electricite", "électricité auto"],
-        "accessoires": ["accessoires", "autoradio", "caméra", "attelage", "caméra de recul"],
-        "changement_pneus": ["pneus", "montage pneus", "changement pneus", "changement de pneus"],
-        "equilibrage": ["équilibrage", "parallélisme", "equilibrage"],
-        "permutation": ["permutation", "permutation pneus", "permutation de pneus"],
-        "carrosserie": ["carrosserie", "peinture", "réparation carrosserie", "peinture auto"],
-        "polissage": ["polissage", "débosselage", "polish"],
-        "nettoyage": ["nettoyage", "lavage", "lavage auto", "nettoyage intérieur", "nettoyage extérieur"],
-        "depannage": ["dépannage", "réparation urgente", "depannage", "urgence"],
-        "devis": ["devis", "estimation"]
-      }
-
       const pricesMap: Record<string, number | null> = {}
 
-      // Fonction pour normaliser les chaînes (enlever accents, minuscules)
-      const normalizeString = (str: string) => {
-        return str
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "") // Enlever les accents
-          .trim()
-      }
-
-      // Pour chaque service ID, chercher dans tous les services du garage
-      for (const [serviceId, keywords] of Object.entries(serviceKeywords)) {
-        let matchedService = null
-
-        // Chercher dans tous les services du garage
-        if (allServices && allServices.length > 0) {
-          for (const service of allServices) {
-            const serviceNameNormalized = normalizeString(service.name)
-            
-            // Vérifier si un des keywords correspond au nom du service
-            const matches = keywords.some(keyword => {
-              const keywordNormalized = normalizeString(keyword)
-              return serviceNameNormalized.includes(keywordNormalized) || keywordNormalized.includes(serviceNameNormalized)
-            })
-
-            if (matches) {
-              matchedService = service
-              break
-            }
-          }
-        }
-
-        if (matchedService) {
-          const price = matchedService.price != null ? Number(matchedService.price) : null
-          const basePrice = matchedService.base_price != null ? Number(matchedService.base_price) : null
+      // Créer un mapping basé sur les noms de services réels (normalisés comme dans ServiceSelector)
+      if (allServices && allServices.length > 0) {
+        console.log(`💰 Chargement des prix pour ${allServices.length} services du garage ${garageId}`)
+        for (const service of allServices) {
+          // Générer l'ID de service de la même manière que dans ServiceSelector
+          const serviceId = service.name.toLowerCase().replace(/\s+/g, '_')
+          
+          const price = service.price != null ? Number(service.price) : null
+          const basePrice = service.base_price != null ? Number(service.base_price) : null
           
           // PRIORITÉ 1 : Utiliser le prix fixe du service
           if (price != null && !isNaN(price) && price > 0) {
             pricesMap[serviceId] = price
+            console.log(`✅ Prix chargé: ${service.name} (${serviceId}) = ${price}€`)
           }
           // PRIORITÉ 2 : Fallback sur base_price
           else if (basePrice != null && !isNaN(basePrice) && basePrice > 0) {
             pricesMap[serviceId] = basePrice
+            console.log(`✅ Prix chargé (base_price): ${service.name} (${serviceId}) = ${basePrice}€`)
           } else {
             pricesMap[serviceId] = null
+            console.log(`⚠️ Pas de prix pour ${service.name} (${serviceId})`)
           }
-        } else {
-          pricesMap[serviceId] = null
         }
       }
 
+      console.log('💰 Mapping des prix final:', pricesMap)
       setServicePrices(pricesMap)
     } catch (error) {
     } finally {
@@ -1005,12 +957,13 @@ function ReservationPageContent() {
   // Obtenir la distance en kilomètres pour le tri
   const getDistanceInKm = (garage: Garage): number | null => {
     if (!userPosition || !garage.latitude || !garage.longitude) return null
-    return calculateDistance(
+    const distanceMeters = calculateDistance(
       userPosition.latitude,
       userPosition.longitude,
       garage.latitude,
       garage.longitude
     )
+    return distanceMeters / 1000 // Convertir mètres en kilomètres
   }
 
   // Calculer le nombre de jours disponibles pour un garage dans les 90 prochains jours
@@ -1296,8 +1249,8 @@ function ReservationPageContent() {
         vehicleIdToUse = selectedVehicle!.id
       }
 
-
       const { data: appointmentData, error } = await supabase.from("appointments").insert({
+        flynesis_user_id: user!.id, // La contrainte FK référence auth.users(id), pas fly_accounts(id)
         garage_id: selectedGarage.id,
         service_type: selectedServiceLabel,
         start_time: startTime.toISOString(),
@@ -1872,20 +1825,11 @@ function ReservationPageContent() {
                   selectedService={selectedService}
                   onSelectService={(serviceId, serviceLabel) => {
                     handleServiceSelect(serviceId, serviceLabel)
-                    // Si c'est "autre" et qu'on clique sur continuer, passer à l'étape suivante
-                    if (serviceId === "autre" && otherServiceDescription.trim().length > 10) {
-                      setTimeout(() => {
-                        handleNext()
-                      }, 300)
-                    }
                   }}
                   additionalOptions={additionalOptions}
                   onAdditionalOptionsChange={(options) => setAdditionalOptions((prev) => ({ ...prev, ...options }))}
-                  otherServiceDescription={otherServiceDescription}
-                  onOtherServiceChange={setOtherServiceDescription}
-                  otherServiceFiles={otherServiceFiles}
-                  onOtherServiceFilesChange={setOtherServiceFiles}
                   servicePrices={isFromGarageDetails ? servicePrices : undefined}
+                  isFromGarageDetails={isFromGarageDetails}
                 />
               </div>
             )}

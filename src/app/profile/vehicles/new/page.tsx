@@ -69,31 +69,47 @@ export default function NewVehiclePage() {
       if (!rpcError && rpcResult) {
         clientId = rpcResult
       } else {
-        // Fallback: chercher directement dans carslink_users
+        // Fallback: chercher d'abord le fly_accounts pour obtenir le flynesis_user_id correct
+        const { data: flyAccount, error: flyAccountError } = await supabase
+          .from('fly_accounts')
+          .select('id')
+          .eq('auth_user_id', user.id)
+          .maybeSingle()
+        
+        if (flyAccountError || !flyAccount?.id) {
+          throw new Error("Votre compte Flynesis n'existe pas encore. Veuillez d'abord compléter votre profil.")
+        }
+
+        // Chercher directement dans carslink_users avec le fly_accounts.id
         const { data: carslinkUser, error: carslinkError } = await supabase
           .from('carslink_users')
           .select('id')
-          .eq('flynesis_user_id', user.id)
+          .eq('flynesis_user_id', flyAccount.id)
           .eq('is_deleted', false)
           .maybeSingle()
         
         if (!carslinkError && carslinkUser?.id) {
           clientId = carslinkUser.id
         } else {
-          // Aucun résultat trouvé, essayer de créer
+          // Aucun résultat trouvé, essayer de créer avec le fly_accounts.id
           const { data: newCarslinkUser, error: createError } = await supabase
             .from('carslink_users')
             .insert({
-              flynesis_user_id: user.id,
+              flynesis_user_id: flyAccount.id, // Utiliser l'ID de fly_accounts, pas auth.users.id
               first_name: user.user_metadata?.first_name || '',
               last_name: user.user_metadata?.last_name || '',
               email: user.email || '',
-              phone: user.phone || '',
+              role: 'client',
+              is_active: true,
+              is_deleted: false,
             })
             .select('id')
             .single()
           
-          if (createError) throw createError
+          if (createError) {
+            console.error('Erreur lors de la création de carslink_users:', createError)
+            throw createError
+          }
           clientId = newCarslinkUser.id
         }
       }
@@ -102,9 +118,20 @@ export default function NewVehiclePage() {
         throw new Error("Impossible d'obtenir l'ID client.")
       }
 
+      // Récupérer le fly_accounts.id pour flynesis_user_id
+      const { data: flyAccount, error: flyAccountError } = await supabase
+        .from('fly_accounts')
+        .select('id')
+        .eq('auth_user_id', user.id)
+        .maybeSingle()
+      
+      if (flyAccountError || !flyAccount?.id) {
+        throw new Error("Votre compte Flynesis n'existe pas encore. Veuillez d'abord compléter votre profil.")
+      }
+
       // Préparer les données du véhicule
       const vehicleData: any = {
-        flynesis_user_id: user.id,
+        flynesis_user_id: flyAccount.id, // Utiliser l'ID de fly_accounts, pas auth.users.id
         client_id: clientId,
         brand: formData.brand,
         model: formData.model,

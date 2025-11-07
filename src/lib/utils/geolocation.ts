@@ -47,7 +47,7 @@ export function getUserPosition(): Promise<{ latitude: number; longitude: number
 }
 
 /**
- * Calcule la distance en km entre deux points (formule de Haversine)
+ * Calcule la distance en mètres entre deux points (formule de Haversine)
  */
 export function calculateDistance(
   lat1: number,
@@ -55,7 +55,7 @@ export function calculateDistance(
   lat2: number,
   lon2: number
 ): number {
-  const R = 6371 // Rayon de la Terre en km
+  const R = 6371e3 // Rayon de la Terre en mètres
   const dLat = ((lat2 - lat1) * Math.PI) / 180
   const dLon = ((lon2 - lon1) * Math.PI) / 180
   const a =
@@ -65,7 +65,7 @@ export function calculateDistance(
       Math.sin(dLon / 2) *
       Math.sin(dLon / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
+  return R * c // Distance en mètres
 }
 
 /**
@@ -88,8 +88,8 @@ export function isWithinRadius(
   lon2: number,
   radiusMeters: number
 ): boolean {
-  const distanceKm = calculateDistance(lat1, lon1, lat2, lon2)
-  return distanceKm * 1000 <= radiusMeters
+  const distanceMeters = calculateDistance(lat1, lon1, lat2, lon2)
+  return distanceMeters <= radiusMeters
 }
 
 /**

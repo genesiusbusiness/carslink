@@ -73,6 +73,7 @@ export default function GarageDetailPage() {
 
   const loadGarage = async () => {
     try {
+      console.log('🔍 Chargement du garage:', garageId)
       const { data, error } = await supabase
         .from("carslink_garages")
         .select("*")
@@ -80,13 +81,21 @@ export default function GarageDetailPage() {
         .single()
 
       if (error) {
-        console.error("Error loading garage:", error)
+        console.error("❌ Erreur lors du chargement du garage:", error)
+        console.error("Détails:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
         return
       }
 
+      console.log('✅ Garage chargé:', data?.name)
       setGarage(data)
-    } catch (error) {
-      console.error("Error loading garage:", error)
+    } catch (error: any) {
+      console.error("❌ Erreur inattendue lors du chargement du garage:", error)
+      console.error("Stack:", error?.stack)
     } finally {
       setLoading(false)
     }
@@ -94,6 +103,7 @@ export default function GarageDetailPage() {
 
   const loadServices = async () => {
     try {
+      console.log('🔍 Chargement des services pour garage:', garageId)
       const { data, error } = await supabase
         .from("carslink_garage_services")
         .select(`
@@ -112,7 +122,13 @@ export default function GarageDetailPage() {
         .order("name", { ascending: true })
 
       if (error) {
-        console.error("Error loading services:", error)
+        console.error("❌ Erreur lors du chargement des services:", error)
+        console.error("Détails:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
         return
       }
 
@@ -126,14 +142,17 @@ export default function GarageDetailPage() {
         section: service.section || null,
       }))
 
+      console.log('✅ Services chargés:', formattedServices.length)
       setServices(formattedServices)
-    } catch (error) {
-      console.error("Error loading services:", error)
+    } catch (error: any) {
+      console.error("❌ Erreur inattendue lors du chargement des services:", error)
+      console.error("Stack:", error?.stack)
     }
   }
 
   const loadOpeningHours = async () => {
     try {
+      console.log('🔍 Chargement des horaires pour garage:', garageId)
       const { data, error } = await supabase
         .from("carslink_garage_opening_hours")
         .select("*")
@@ -141,13 +160,21 @@ export default function GarageDetailPage() {
         .order("day_of_week", { ascending: true })
 
       if (error) {
-        console.error("Error loading opening hours:", error)
+        console.error("❌ Erreur lors du chargement des horaires:", error)
+        console.error("Détails:", {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        })
         return
       }
 
+      console.log('✅ Horaires chargés:', data?.length || 0)
       setOpeningHours(data || [])
-    } catch (error) {
-      console.error("Error loading opening hours:", error)
+    } catch (error: any) {
+      console.error("❌ Erreur inattendue lors du chargement des horaires:", error)
+      console.error("Stack:", error?.stack)
     }
   }
 

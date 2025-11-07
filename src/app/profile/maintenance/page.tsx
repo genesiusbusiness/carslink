@@ -96,21 +96,57 @@ export default function MaintenancePage() {
         .from("fly_accounts")
         .select("id")
         .eq("auth_user_id", user.id)
-        .single()
+        .maybeSingle()
 
-      if (flyAccountError || !flyAccount) {
-        throw new Error("Compte FlyID introuvable")
-      }
+      let vehiclesData = null
+      let vehiclesError = null
 
       // Charger les véhicules avec leurs documents
-      const { data: vehiclesData, error: vehiclesError } = await supabase
-        .from("vehicles")
-        .select(`
-          *,
-          documents:vehicle_documents(*)
-        `)
-        .eq("flynesis_user_id", flyAccount.id)
-        .order("created_at", { ascending: false })
+      // Essayer d'abord avec flyAccount.id, puis avec user.id pour compatibilité avec anciens véhicules
+      if (!flyAccountError && flyAccount?.id) {
+        // Utiliser fly_accounts.id (nouveau système)
+        const result = await supabase
+          .from("vehicles")
+          .select(`
+            *,
+            documents:vehicle_documents(*)
+          `)
+          .eq("flynesis_user_id", flyAccount.id)
+          .order("created_at", { ascending: false })
+        
+        vehiclesData = result.data
+        vehiclesError = result.error
+
+        // Si aucun véhicule trouvé avec flyAccount.id, essayer avec user.id (anciens véhicules)
+        if (!vehiclesError && (!vehiclesData || vehiclesData.length === 0)) {
+          const fallbackResult = await supabase
+            .from("vehicles")
+            .select(`
+              *,
+              documents:vehicle_documents(*)
+            `)
+            .eq("flynesis_user_id", user.id)
+            .order("created_at", { ascending: false })
+          
+          if (!fallbackResult.error && fallbackResult.data) {
+            vehiclesData = fallbackResult.data
+            vehiclesError = fallbackResult.error
+          }
+        }
+      } else {
+        // Si pas de fly_accounts, utiliser user.id directement
+        const result = await supabase
+          .from("vehicles")
+          .select(`
+            *,
+            documents:vehicle_documents(*)
+          `)
+          .eq("flynesis_user_id", user.id)
+          .order("created_at", { ascending: false })
+        
+        vehiclesData = result.data
+        vehiclesError = result.error
+      }
 
       if (vehiclesError) {
         throw vehiclesError

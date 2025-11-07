@@ -306,7 +306,18 @@ export default function AppointmentsPage() {
         <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-28 sm:pb-32">
         {/* Header avec verre givré - Responsive */}
         <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6 mb-4 sm:mb-6">
+          <div className="flex items-center gap-3 mb-4 sm:mb-6">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                // Toujours rediriger vers l'accueil pour éviter les problèmes de page blanche
+                router.push("/")
+              }}
+              className="h-10 w-10 rounded-full hover:bg-gray-100 transition-all text-gray-700"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
             <div className="flex-1 min-w-0">
               <h1 className="text-xl sm:text-2xl font-light text-gray-900">Mes rendez-vous</h1>
               <p className="text-xs sm:text-sm text-gray-500 font-light mt-1 sm:mt-2">

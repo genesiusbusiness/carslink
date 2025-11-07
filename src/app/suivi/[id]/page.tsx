@@ -37,6 +37,8 @@ export default function SuiviPage() {
     if (!appointmentId) return
 
     try {
+      console.log('🔍 Chargement du suivi pour appointment:', appointmentId)
+      
       // Charger l'appointment
       const { data: appointmentData, error: appointmentError } = await supabase
         .from("appointments")
@@ -44,7 +46,12 @@ export default function SuiviPage() {
         .eq("id", appointmentId)
         .single()
 
-      if (appointmentError) throw appointmentError
+      if (appointmentError) {
+        console.error("❌ Erreur lors du chargement de l'appointment:", appointmentError)
+        throw appointmentError
+      }
+
+      console.log('✅ Appointment chargé:', appointmentData)
 
       if (appointmentData) {
         setAppointment(appointmentData)
@@ -52,25 +59,40 @@ export default function SuiviPage() {
 
         // Charger le garage
         if (appointmentData.garage_id) {
-          const { data: garageData } = await supabase
-            .from("garages")
+          console.log('🔍 Chargement du garage:', appointmentData.garage_id)
+          const { data: garageData, error: garageError } = await supabase
+            .from("carslink_garages")
             .select("*")
             .eq("id", appointmentData.garage_id)
             .single()
-          if (garageData) setGarage(garageData)
+          
+          if (garageError) {
+            console.error("❌ Erreur lors du chargement du garage:", garageError)
+          } else if (garageData) {
+            console.log('✅ Garage chargé:', garageData)
+            setGarage(garageData)
+          }
         }
 
         // Charger le véhicule
         if (appointmentData.vehicle_id) {
-          const { data: vehicleData } = await supabase
+          console.log('🔍 Chargement du véhicule:', appointmentData.vehicle_id)
+          const { data: vehicleData, error: vehicleError } = await supabase
             .from("vehicles")
             .select("*")
             .eq("id", appointmentData.vehicle_id)
             .single()
-          if (vehicleData) setVehicle(vehicleData)
+          
+          if (vehicleError) {
+            console.error("❌ Erreur lors du chargement du véhicule:", vehicleError)
+          } else if (vehicleData) {
+            console.log('✅ Véhicule chargé:', vehicleData)
+            setVehicle(vehicleData)
+          }
         }
       }
     } catch (error: any) {
+      console.error("❌ Erreur inattendue:", error)
       showElegantToast({
         title: "Erreur",
         message: error.message || "Impossible de charger les données",
@@ -208,17 +230,84 @@ export default function SuiviPage() {
             </div>
           </div>
 
-          {/* Card principale */}
+          {/* Card principale - Statut de la réparation */}
           <Card className="mb-4">
             <CardHeader>
-              <CardTitle>Statut de la réparation</CardTitle>
-              <CardDescription>
-                {appointment.service_type} - {appointment.start_time ? formatDate(appointment.start_time) : 'N/A'}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Statut de la réparation</CardTitle>
+                  <CardDescription>
+                    {appointment.service_type} - {appointment.start_time ? formatDate(appointment.start_time) : 'N/A'}
+                  </CardDescription>
+                </div>
+                <Badge variant={getStatusBadge(appointment.status || "pending")}>
+                  {appointment.status === "pending" && "En attente"}
+                  {appointment.status === "confirmed" && "Confirmé"}
+                  {appointment.status === "in_progress" && "En cours"}
+                  {appointment.status === "completed" && "Terminé"}
+                  {appointment.status === "cancelled" && "Annulé"}
+                </Badge>
+              </div>
             </CardHeader>
             <CardContent>
+              {/* Barre de progression des étapes */}
+              <div className="space-y-6">
+                {STATUS_STEPS.map((step, index) => {
+                  const StepIcon = step.icon
+                  const isActive = index <= effectiveStepIndex
+                  const isCurrent = index === effectiveStepIndex
+
+                  return (
+                    <motion.div
+                      key={step.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                      className="flex items-start gap-4"
+                    >
+                      <div className="flex flex-col items-center">
+                        <div
+                          className={`h-12 w-12 rounded-full flex items-center justify-center border-2 transition-all ${
+                            isActive
+                              ? "bg-violet-500 border-violet-500 text-white"
+                              : "bg-gray-100 border-gray-300 text-gray-400"
+                          }`}
+                        >
+                          {isActive ? (
+                            <CheckCircle className="h-6 w-6" />
+                          ) : (
+                            <StepIcon className="h-6 w-6" />
+                          )}
+                        </div>
+                        {index < STATUS_STEPS.length - 1 && (
+                          <div
+                            className={`w-0.5 h-16 mt-2 ${
+                              isActive ? "bg-violet-500" : "bg-gray-200"
+                            }`}
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 pt-2">
+                        <div
+                          className={`font-semibold text-lg ${
+                            isActive ? "text-gray-900" : "text-gray-400"
+                          }`}
+                        >
+                          {step.label}
+                        </div>
+                        {isCurrent && (
+                          <div className="text-sm text-violet-600 mt-1">
+                            Étape en cours
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )
+                })}
+              </div>
+
               {/* Message si pas encore commencé */}
-              {appointment.status === "pending" && !tracking && (
+              {appointment.status === "pending" && (
                 <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
                   <div className="flex items-start gap-3">
                     <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
@@ -228,6 +317,86 @@ export default function SuiviPage() {
                         Votre rendez-vous est en attente de confirmation par le garage. Vous recevrez une notification dès qu'il sera confirmé.
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Informations du rendez-vous */}
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>Informations du rendez-vous</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Garage */}
+              {garage && (
+                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                  <MapPin className="h-5 w-5 text-gray-600 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">{garage.name}</div>
+                    {garage.address && (
+                      <div className="text-sm text-gray-600">{garage.address}</div>
+                    )}
+                    {garage.phone && (
+                      <div className="text-sm text-gray-600 flex items-center gap-1 mt-1">
+                        <Phone className="h-4 w-4" />
+                        {garage.phone}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Véhicule */}
+              {vehicle && (
+                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                  <Car className="h-5 w-5 text-gray-600 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900">
+                      {vehicle.brand} {vehicle.model}
+                    </div>
+                    {vehicle.license_plate && (
+                      <div className="text-sm text-gray-600">Plaque: {vehicle.license_plate}</div>
+                    )}
+                    {vehicle.year && (
+                      <div className="text-sm text-gray-600">Année: {vehicle.year}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Date et heure */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <Calendar className="h-5 w-5 text-gray-600 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">Date et heure</div>
+                  {appointment.start_time ? (
+                    <div className="text-sm text-gray-600">
+                      {formatDateTime(appointment.start_time)}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">Non définie</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Service */}
+              <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                <Wrench className="h-5 w-5 text-gray-600 mt-0.5" />
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-900">Service</div>
+                  <div className="text-sm text-gray-600">{appointment.service_type || 'N/A'}</div>
+                </div>
+              </div>
+
+              {/* Notes */}
+              {appointment.notes && (
+                <div className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
+                  <FileText className="h-5 w-5 text-gray-600 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-900 mb-1">Notes</div>
+                    <div className="text-sm text-gray-600 whitespace-pre-wrap">{appointment.notes}</div>
                   </div>
                 </div>
               )}
