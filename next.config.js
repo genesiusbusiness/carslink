@@ -10,6 +10,15 @@ const nextConfig = {
       },
     ],
   },
+  // Configuration explicite pour la résolution des modules
+  webpack: (config, { isServer }) => {
+    // S'assurer que les alias sont correctement résolus
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname, 'src'),
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig
