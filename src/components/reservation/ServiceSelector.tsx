@@ -258,16 +258,16 @@ export function ServiceSelector({
             const isExpanded = expandedCategories.has(category.name)
             const CategoryIcon = category.icon
 
-            return (
-              <motion.div
+          return (
+            <motion.div
                 key={category.name}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: categoryIndex * 0.05 }}
                 className="rounded-2xl border bg-white/50 backdrop-blur p-3 md:p-4 hover:shadow-sm transition"
               >
                 {/* En-tête de la catégorie (cliquable pour ouvrir/fermer) */}
-                <button
+                  <button
                   onClick={() => toggleCategory(category.name)}
                   className="w-full flex items-center justify-between gap-3 mb-4 focus:outline-none focus:ring-2 focus:ring-violet-400 rounded-lg p-1 -m-1"
                 >
@@ -277,25 +277,25 @@ export function ServiceSelector({
                     </div>
                     <h3 className="font-medium text-gray-900">{category.name}</h3>
                     <span className="text-xs text-gray-500">({category.services.length})</span>
-                  </div>
-                  <motion.div
+            </div>
+            <motion.div
                     animate={{ rotate: isExpanded ? 180 : 0 }}
-                    transition={{ duration: 0.2 }}
-                  >
+              transition={{ duration: 0.2 }}
+            >
                     <ChevronDown className="h-5 w-5 text-gray-400" />
-                  </motion.div>
-                </button>
+            </motion.div>
+          </button>
 
                 {/* Liste des services de la catégorie (déroulante) */}
-                <AnimatePresence>
+          <AnimatePresence>
                   {isExpanded && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="overflow-hidden"
-                    >
+                className="overflow-hidden"
+              >
                       <div className="space-y-3">
                         {category.services.map((service, serviceIndex) => {
                           const isSelected = selectedService === service.id
@@ -343,64 +343,64 @@ export function ServiceSelector({
                                     <span className="text-sm font-semibold text-violet-600 whitespace-nowrap">
                                       {service.price.toFixed(0)}€
                                     </span>
-                                  )}
-                                </div>
-                              </div>
+                      )}
+                    </div>
+                  </div>
                             </motion.button>
                           )
                         })}
-                      </div>
+                    </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </motion.div>
             )
           })
-        )}
+            )}
       </div>
 
       {/* Options supplémentaires */}
       <div className="mt-6">
         <h4 className="text-sm font-medium text-gray-700 mb-3">Options supplémentaires</h4>
-        <motion.button
-          onClick={() => {
-            const newOptions = {
-              ...additionalOptions,
+              <motion.button
+                onClick={() => {
+                  const newOptions = {
+                    ...additionalOptions,
               courtesyVehicle: !additionalOptions?.courtesyVehicle,
-            }
-            onAdditionalOptionsChange?.(newOptions)
-          }}
+                  }
+                  onAdditionalOptionsChange?.(newOptions)
+                }}
           aria-pressed={additionalOptions?.courtesyVehicle || false}
           className={`w-full rounded-xl border px-4 py-3 text-left transition-all focus:outline-none focus:ring-2 focus:ring-violet-400 ${
             additionalOptions?.courtesyVehicle
               ? "border-violet-500 bg-violet-50"
               : "border-gray-200 hover:bg-gray-50 active:scale-[0.99]"
           }`}
-          whileTap={{ scale: 0.99 }}
-        >
-          <div className="flex items-center gap-3">
-            <div
+                whileTap={{ scale: 0.99 }}
+              >
+                <div className="flex items-center gap-3">
+                  <div
               className={`h-8 w-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                 additionalOptions?.courtesyVehicle
                   ? "bg-gradient-to-br from-violet-600 to-indigo-600 text-white"
                   : "bg-gray-100 text-gray-600"
-              }`}
-            >
+                    }`}
+                  >
               {additionalOptions?.courtesyVehicle ? (
                 <CarIcon className="h-4 w-4" />
               ) : (
                 <div className="h-2 w-2 rounded-full bg-gray-400" />
               )}
-            </div>
-            <span
-              className={`font-medium ${
+                  </div>
+                  <span
+                    className={`font-medium ${
                 additionalOptions?.courtesyVehicle ? "text-violet-900" : "text-gray-900"
-              }`}
-            >
+                    }`}
+                  >
               Véhicule de courtoisie
-            </span>
-          </div>
-        </motion.button>
+                  </span>
+                </div>
+              </motion.button>
       </div>
     </div>
   )

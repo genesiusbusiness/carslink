@@ -106,13 +106,13 @@ export default function MaintenancePage() {
       if (!flyAccountError && flyAccount?.id) {
         // Utiliser fly_accounts.id (nouveau système)
         const result = await supabase
-          .from("vehicles")
-          .select(`
-            *,
-            documents:vehicle_documents(*)
-          `)
-          .eq("flynesis_user_id", flyAccount.id)
-          .order("created_at", { ascending: false })
+        .from("vehicles")
+        .select(`
+          *,
+          documents:vehicle_documents(*)
+        `)
+        .eq("flynesis_user_id", flyAccount.id)
+        .order("created_at", { ascending: false })
         
         vehiclesData = result.data
         vehiclesError = result.error

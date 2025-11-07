@@ -187,6 +187,8 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
         ) {
           errorMessage = "Cet email est déjà associé à un compte FlyID. Utilisez l'onglet 'Connexion'."
           setEmailExists(true)
+        } else if (authError.status === 429 || authError.message?.includes('Too Many Requests')) {
+          errorMessage = "Trop de tentatives. Veuillez patienter quelques minutes avant de réessayer."
         } else if (authError.message?.includes('Password should be at least')) {
           errorMessage = "Le mot de passe doit contenir au moins 6 caractères"
         } else if (authError.message?.includes('Invalid email')) {
@@ -228,6 +230,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
               lastName: formData.lastName,
               email: formData.email,
               phone: formData.phone,
+              userId: authData.user.id, // Passer l'ID de l'utilisateur pour que l'API utilise le client admin
             }),
           })
 
@@ -253,7 +256,26 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps = {}) {
           }
 
           if (result.success) {
-            // Profil créé avec succès
+            // Vérifier ce qui a été créé
+            const created = result.created || {}
+            const missing = []
+            
+            if (!created.flyAccount) {
+              missing.push("compte FlyID")
+            }
+            if (!created.carslinkClient) {
+              missing.push("profil CarsLink")
+            }
+            if (!created.carslinkUser) {
+              missing.push("compte utilisateur CarsLink")
+            }
+            
+            if (missing.length > 0) {
+              console.warn('⚠️ Certains éléments n\'ont pas été créés:', missing)
+              // Ne pas bloquer l'inscription, mais logger l'avertissement
+            } else {
+              console.log('✅ Tous les profils ont été créés avec succès')
+            }
           }
         } catch (profileError: any) {
           // Ce n'est pas bloquant, on continue quand même

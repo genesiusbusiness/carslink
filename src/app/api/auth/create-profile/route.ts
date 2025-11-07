@@ -151,6 +151,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Créer le profil CarsLink (carslink_clients) avec le flyid
+    let carslinkClientId: string | null = null
+    let carslinkUserId: string | null = null
     if (flyAccountId) {
       const { data: existingClient } = await supabaseAdmin
         .from('carslink_clients')
@@ -158,24 +160,30 @@ export async function POST(request: NextRequest) {
         .eq('flyid', flyAccountId)
         .maybeSingle()
 
-
-      if (!existingClient) {
-        const { error: clientError } = await supabaseAdmin
+      if (existingClient) {
+        carslinkClientId = existingClient.id
+      } else {
+        const { data: newClient, error: clientError } = await supabaseAdmin
           .from('carslink_clients')
           .insert({
             flyid: flyAccountId,
             phone: phone || null,
           })
+          .select('id')
+          .single()
 
         if (clientError) {
+          console.error('❌ Erreur lors de la création de carslink_clients:', clientError)
           // Ce n'est pas bloquant, on continue quand même
+        } else if (newClient) {
+          carslinkClientId = newClient.id
+          console.log('✅ carslink_clients créé:', carslinkClientId)
         }
       }
 
       // Synchroniser avec carslink_users (pour CarsLinkSupport)
       
       // Essayer d'abord avec la fonction RPC si elle existe
-      let carslinkUserId: string | null = null
       try {
         const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('link_flynesis_to_carslink', {
           p_flynesis_id: flyAccountId,
@@ -214,9 +222,11 @@ export async function POST(request: NextRequest) {
             .single()
 
           if (userError) {
+            console.error('❌ Erreur lors de la création de carslink_users:', userError)
             // Ce n'est pas bloquant, on continue quand même
           } else {
             carslinkUserId = newUser?.id || null
+            console.log('✅ carslink_users créé:', carslinkUserId)
           }
         } else {
           carslinkUserId = existingUser.id
@@ -224,9 +234,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log récapitulatif
+    console.log('📋 Récapitulatif de la création de profil:')
+    console.log('  - fly_accounts:', flyAccountId ? '✅ créé' : '❌ non créé')
+    console.log('  - carslink_clients:', carslinkClientId ? '✅ créé' : '⚠️ non créé')
+    console.log('  - carslink_users:', carslinkUserId ? '✅ créé' : '⚠️ non créé')
+
     return NextResponse.json({
       success: true,
       flyAccountId,
+      carslinkClientId,
+      carslinkUserId,
+      created: {
+        flyAccount: !!flyAccountId,
+        carslinkClient: !!carslinkClientId,
+        carslinkUser: !!carslinkUserId,
+      }
     })
   } catch (error: any) {
     return NextResponse.json(

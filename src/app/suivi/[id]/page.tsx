@@ -235,10 +235,10 @@ export default function SuiviPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Statut de la réparation</CardTitle>
-                  <CardDescription>
-                    {appointment.service_type} - {appointment.start_time ? formatDate(appointment.start_time) : 'N/A'}
-                  </CardDescription>
+              <CardTitle>Statut de la réparation</CardTitle>
+              <CardDescription>
+                {appointment.service_type} - {appointment.start_time ? formatDate(appointment.start_time) : 'N/A'}
+              </CardDescription>
                 </div>
                 <Badge variant={getStatusBadge(appointment.status || "pending")}>
                   {appointment.status === "pending" && "En attente"}

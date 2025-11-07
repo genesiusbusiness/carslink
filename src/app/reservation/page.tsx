@@ -672,9 +672,9 @@ function ReservationPageContent() {
       const pricesMap: Record<string, number | null> = {}
 
       // Créer un mapping basé sur les noms de services réels (normalisés comme dans ServiceSelector)
-      if (allServices && allServices.length > 0) {
+        if (allServices && allServices.length > 0) {
         console.log(`💰 Chargement des prix pour ${allServices.length} services du garage ${garageId}`)
-        for (const service of allServices) {
+          for (const service of allServices) {
           // Générer l'ID de service de la même manière que dans ServiceSelector
           const serviceId = service.name.toLowerCase().replace(/\s+/g, '_')
           

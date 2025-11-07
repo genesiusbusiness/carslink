@@ -89,10 +89,10 @@ export default function ProfilePage() {
       } else {
         // Si pas de fly_accounts, essayer avec user.id directement
         const result = await supabase
-          .from("vehicles")
-          .select("*")
-          .eq("flynesis_user_id", user.id)
-          .order("created_at", { ascending: false })
+        .from("vehicles")
+        .select("*")
+        .eq("flynesis_user_id", user.id)
+        .order("created_at", { ascending: false })
         
         vehiclesData = result.data
         vehiclesError = result.error
