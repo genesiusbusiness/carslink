@@ -351,6 +351,25 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
     let responseData: any
 
     if (AI_API_PROVIDER === 'openrouter') {
+      // Test simple de connectivité OpenRouter avant d'essayer les modèles
+      console.log('🔍 Test de connectivité OpenRouter...')
+      try {
+        const testResponse = await fetch('https://openrouter.ai/api/v1/models', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${AI_API_KEY}`,
+          },
+          signal: AbortSignal.timeout(5000), // 5 secondes pour le test
+        })
+        console.log('✅ Test de connectivité OpenRouter:', {
+          status: testResponse.status,
+          ok: testResponse.ok,
+        })
+      } catch (testError: any) {
+        console.error('❌ Test de connectivité OpenRouter échoué:', testError.message)
+        // Continuer quand même, peut-être que c'est juste le endpoint /models qui ne fonctionne pas
+      }
+      
       // Essayer plusieurs modèles en cas d'échec
       let lastError: Error | null = null
       let success = false
@@ -361,9 +380,12 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
         
         try {
           // Créer un AbortController pour gérer le timeout
-          // Réduire le timeout à 20 secondes pour AWS Amplify (qui a souvent un timeout plus court)
+          // Réduire le timeout à 15 secondes pour AWS Amplify (qui a souvent un timeout plus court)
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 secondes de timeout
+          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 secondes de timeout
+          
+          console.log(`📤 Envoi de la requête à OpenRouter avec le modèle ${currentModel}...`)
+          const requestStartTime = Date.now()
           
           try {
             response = await fetch(AI_API_URL, {
@@ -378,21 +400,31 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               body: JSON.stringify({
                 model: currentModel,
                 messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt },
+                  { role: 'system', content: systemPrompt.substring(0, 1000) }, // Limiter la taille du prompt
+                  { role: 'user', content: userPrompt.substring(0, 1000) }, // Limiter la taille du prompt
                 ],
                 temperature: 0.7,
-                max_tokens: 1500, // Réduire pour éviter les timeouts
+                max_tokens: 1000, // Réduire encore plus pour éviter les timeouts
               }),
               signal: controller.signal, // Ajouter le signal pour le timeout
             })
             
+            const requestDuration = Date.now() - requestStartTime
+            console.log(`⏱️ Requête OpenRouter terminée en ${requestDuration}ms`)
+            
             clearTimeout(timeoutId) // Annuler le timeout si la requête réussit
           } catch (fetchError: any) {
             clearTimeout(timeoutId)
+            const requestDuration = Date.now() - requestStartTime
+            console.error(`❌ Erreur après ${requestDuration}ms avec le modèle ${currentModel}:`, {
+              name: fetchError.name,
+              message: fetchError.message,
+              cause: fetchError.cause,
+            })
+            
             if (fetchError.name === 'AbortError') {
-              console.error(`❌ Timeout avec le modèle ${currentModel} (30 secondes)`)
-              lastError = new Error(`OpenRouter API timeout: La requête a pris plus de 30 secondes`)
+              console.error(`❌ Timeout avec le modèle ${currentModel} (15 secondes)`)
+              lastError = new Error(`OpenRouter API timeout: La requête a pris plus de 15 secondes`)
               continue // Essayer le modèle suivant
             }
             console.error(`❌ Erreur réseau avec le modèle ${currentModel}:`, fetchError)
