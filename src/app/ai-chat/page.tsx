@@ -1605,7 +1605,7 @@ export default function AIChatPage() {
               }
             }}
             placeholder="Décrivez votre problème..."
-            disabled={isLoading || !apiAvailable}
+            disabled={isLoading}
             className="flex-1 min-h-[44px] text-sm"
           />
           <Button
