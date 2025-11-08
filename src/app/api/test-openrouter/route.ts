@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     let test1Error: any = null
     
     try {
-      const testResponse = await fetch('https://openrouter.ai/api/v1/models', {
+      const testResponse = await fetch(`${AI_API_BASE_URL}/models`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${AI_API_KEY}`,
