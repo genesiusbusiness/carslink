@@ -7,7 +7,8 @@ import { createClient } from '@supabase/supabase-js'
 const AI_API_PROVIDER = 'openrouter'
 const AI_API_KEY = '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'
 const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const AI_MODEL = 'mistralai/mixtral-8x7b-instruct'
+// Utiliser un modèle gratuit et disponible
+const AI_MODEL = 'mistralai/mistral-7b-instruct:free'
 
 // Supabase Admin pour les opérations serveur
 // Créer le client Supabase Admin de manière sécurisée
@@ -338,6 +339,12 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
 
     if (AI_API_PROVIDER === 'openrouter') {
       // Utiliser OpenRouter avec le modèle configuré
+      console.log('🔍 Appel OpenRouter API:', {
+        url: AI_API_URL,
+        model: AI_MODEL,
+        apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
+      })
+      
       response = await fetch(AI_API_URL, {
         method: 'POST',
         headers: {
@@ -353,14 +360,28 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
             { role: 'user', content: userPrompt },
           ],
           temperature: 0.7,
-          max_tokens: 500,
+          max_tokens: 2000, // Augmenter pour avoir plus de tokens
         }),
+      })
+      
+      console.log('✅ Réponse OpenRouter reçue:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
       })
 
       if (!response.ok) {
         const errorText = await response.text()
         console.error('❌ Erreur OpenRouter API:', response.status, errorText)
-        throw new Error(`OpenRouter API error: ${response.status}`)
+        console.error('❌ Détails de la requête:', {
+          url: AI_API_URL,
+          model: AI_MODEL,
+          apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
+          status: response.status,
+          statusText: response.statusText,
+          errorText: errorText,
+        })
+        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
       }
 
       responseData = await response.json()
@@ -1225,6 +1246,17 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       }
     } catch (aiError: any) {
       console.error('❌ Erreur lors de l\'analyse IA:', aiError)
+      console.error('❌ Détails de l\'erreur:', {
+        message: aiError.message,
+        stack: aiError.stack,
+        name: aiError.name,
+        response: aiError.response,
+        status: aiError.status,
+        AI_API_KEY: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
+        AI_API_URL: AI_API_URL,
+        AI_MODEL: AI_MODEL,
+        AI_API_PROVIDER: AI_API_PROVIDER,
+      })
       
       // En cas d'erreur, retourner le message d'indisponibilité demandé
       aiAnalysis = {
