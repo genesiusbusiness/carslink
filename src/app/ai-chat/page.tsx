@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { ArrowLeft, Send, Bot, User, AlertCircle, Clock, CheckCircle, Calendar, X, Check, Trash2 } from "lucide-react"
@@ -31,6 +31,8 @@ export default function AIChatPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedAnswers, setSelectedAnswers] = useState<Map<number, string>>(new Map())
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const lastMessageRef = useRef<string>("")
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -185,9 +187,36 @@ export default function AIChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
-  const sendMessage = async (messageToSend?: string) => {
+  // ⚠️ ANTI-SPAM: Debounce pour éviter les rafales d'appels
+  const sendMessage = useCallback(async (messageToSend?: string) => {
     const message = messageToSend || inputMessage.trim()
-    if (!message || !user || isLoading) return
+    
+    // Validation: message non vide et longueur raisonnable
+    if (!message || message.length === 0 || message.length > 5000) {
+      if (message.length > 5000) {
+        toast({
+          title: "Message trop long",
+          description: "Veuillez limiter votre message à 5000 caractères.",
+          variant: "destructive",
+        })
+      }
+      return
+    }
+    
+    // Anti-spam: ignorer les messages identiques répétés
+    if (message === lastMessageRef.current) {
+      console.warn('⚠️ Message identique ignoré (anti-spam)')
+      return
+    }
+    lastMessageRef.current = message
+    
+    // Annuler le debounce précédent s'il existe
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+      debounceTimerRef.current = null
+    }
+    
+    if (!user || isLoading) return
 
     const userMessage = message.trim()
     setInputMessage("")
@@ -477,7 +506,7 @@ export default function AIChatPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user, isLoading, conversationId, vehicles, profile, toast])
 
   const loadConversation = async (convId: string) => {
     if (!user) return

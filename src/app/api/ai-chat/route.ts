@@ -4,7 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { 
   FREE_MODELS, 
   callOpenRouter, 
-  ensureServerEnv 
+  ensureServerEnv,
+  isValidFreeModel
 } from '@/lib/ai/openrouter'
 
 // Configuration de l'API IA
@@ -702,13 +703,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { conversationId, message, userId, vehicleId, vehicles, profile } = body
+    const { conversationId, message, userId, vehicleId, vehicles, profile, model } = body
 
-    if (!message || !userId) {
+    // ⚠️ VALIDATION: Message non vide et longueur raisonnable
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Message and userId are required' },
+        { error: 'Message is required and must be non-empty' },
         { status: 400 }
       )
+    }
+    
+    if (message.length > 5000) {
+      return NextResponse.json(
+        { error: 'Message too long (max 5000 characters)' },
+        { status: 400 }
+      )
+    }
+    
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'userId is required' },
+        { status: 400 }
+      )
+    }
+    
+    // ⚠️ SÉCURITÉ: Valider que le modèle demandé est dans la liste blanche
+    if (model && !isValidFreeModel(model)) {
+      console.warn(`⚠️ Modèle non autorisé demandé: ${model}. Utilisation du modèle par défaut.`)
     }
 
     // Log détaillé des véhicules reçus

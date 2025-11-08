@@ -10,14 +10,26 @@ export const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openro
 // Si la clé n'est pas trouvée dans les variables d'environnement, utilise le fallback
 export const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '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';
 
-export const OPENROUTER_HEADERS = {
-  Authorization: `Bearer ${OPENROUTER_KEY}`,
-  "Content-Type": "application/json",
-  "HTTP-Referer": process.env.OPENROUTER_REFERER ?? "",
-  "X-Title": "CarsLink Assistant",
-  "X-Source": process.env.OPENROUTER_SITE_URL ?? "",
-  "Referer": process.env.OPENROUTER_REFERER ?? process.env.OPENROUTER_SITE_URL ?? "",
-};
+/**
+ * Construit les en-têtes OpenRouter requis
+ * ⚠️ IMPORTANT: Tous ces en-têtes sont requis pour éviter la désactivation de la clé API
+ */
+export function getOpenRouterHeaders() {
+  const SITE = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || '';
+  const REFERER = process.env.OPENROUTER_REFERER || SITE || '';
+  
+  return {
+    "Authorization": `Bearer ${OPENROUTER_KEY}`,
+    "Content-Type": "application/json",
+    "HTTP-Referer": REFERER,
+    "X-Title": "CarsLink Assistant",
+    "X-Source": SITE,
+    "Referer": REFERER,
+  };
+}
+
+// Pour compatibilité avec l'ancien code
+export const OPENROUTER_HEADERS = getOpenRouterHeaders();
 
 // Liste **strictement gratuite** de modèles OpenRouter
 export const FREE_MODELS = [
@@ -75,8 +87,18 @@ export function ensureServerEnv() {
 }
 
 /**
+ * Valide qu'un modèle est dans la liste blanche des modèles gratuits
+ * @param model - Le modèle à valider
+ * @returns true si le modèle est autorisé, false sinon
+ */
+export function isValidFreeModel(model: string): model is FreeModel {
+  return (FREE_MODELS as readonly string[]).includes(model);
+}
+
+/**
  * Appelle l'API OpenRouter avec un modèle spécifique
- * @param model - Le modèle à utiliser
+ * ⚠️ SÉCURITÉ: Valide que le modèle est dans la liste blanche avant l'appel
+ * @param model - Le modèle à utiliser (doit être dans FREE_MODELS)
  * @param messages - Les messages à envoyer (system + user)
  * @param options - Options supplémentaires (temperature, max_tokens, etc.)
  * @returns La réponse de l'API OpenRouter
@@ -88,23 +110,48 @@ export async function callOpenRouter(
     temperature?: number;
     max_tokens?: number;
     timeout?: number;
+    retries?: number;
   } = {}
 ) {
-  const { temperature = 0.7, max_tokens = 1500, timeout = 15000 } = options;
+  // ⚠️ SÉCURITÉ: Valider que le modèle est dans la liste blanche
+  if (!isValidFreeModel(model)) {
+    console.error(`❌ Modèle non autorisé: ${model}. Utilisation du modèle par défaut.`);
+    model = "openrouter/polaris-alpha"; // Modèle par défaut gratuit
+  }
+  
+  const { temperature = 0.7, max_tokens = 1500, timeout = 30000, retries = 1 } = options;
+  
+  // Limiter la taille des messages pour éviter des requêtes trop longues
+  const maxMessageLength = 10000;
+  const limitedMessages = messages.map(msg => ({
+    ...msg,
+    content: msg.content.substring(0, maxMessageLength)
+  }));
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
+    // Construire les en-têtes à chaque appel pour garantir qu'ils sont à jour
+    const headers = getOpenRouterHeaders();
+    
     // Log pour débogage (sans exposer la clé complète)
     console.log(`📤 Appel OpenRouter - Modèle: ${model}, Clé API: ${OPENROUTER_KEY ? `${OPENROUTER_KEY.substring(0, 20)}...${OPENROUTER_KEY.substring(OPENROUTER_KEY.length - 5)}` : 'MANQUANTE'} (longueur: ${OPENROUTER_KEY?.length || 0})`)
+    console.log(`📋 En-têtes OpenRouter:`, {
+      hasAuthorization: !!headers.Authorization,
+      hasHTTPReferer: !!headers["HTTP-Referer"],
+      hasXTitle: !!headers["X-Title"],
+      hasXSource: !!headers["X-Source"],
+      referer: headers["HTTP-Referer"]?.substring(0, 50) || 'MANQUANT',
+      site: headers["X-Source"]?.substring(0, 50) || 'MANQUANT',
+    })
     
     const res = await fetch(`${OPENROUTER_URL}/chat/completions`, {
       method: "POST",
-      headers: OPENROUTER_HEADERS,
+      headers,
       body: JSON.stringify({
         model,
-        messages,
+        messages: limitedMessages,
         temperature,
         max_tokens,
       }),
