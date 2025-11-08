@@ -6,8 +6,9 @@ import { createClient } from '@supabase/supabase-js'
 // Utilise les variables d'environnement AWS Amplify, avec fallback pour le développement local
 const AI_API_PROVIDER = 'openrouter'
 // Utiliser les variables d'environnement AWS Amplify, avec fallback hardcodé pour localhost
+// Supporte aussi OPENROUTER_BASE_UR (sans L) pour compatibilité avec AWS configuré
 const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
-const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'
+const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
 const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
 const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
 const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || OPENROUTER_SITE_URL
