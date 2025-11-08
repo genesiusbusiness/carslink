@@ -6,7 +6,9 @@ export const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openro
 // Lire la clé API depuis les variables d'environnement
 // Sur AWS Amplify, utilise process.env.OPENROUTER_API_KEY
 // En local, utilise le fallback pour le développement
-export const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || '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';
+// ⚠️ IMPORTANT: La clé API doit être configurée dans AWS Amplify Environment Variables
+// Si la clé n'est pas trouvée dans les variables d'environnement, utilise le fallback
+export const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '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';
 
 export const OPENROUTER_HEADERS = {
   Authorization: `Bearer ${OPENROUTER_KEY}`,

@@ -348,11 +348,15 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
 
   try {
     // Rotation/fallback sur les modèles **gratuits** uniquement
+    // Limiter à 5 modèles maximum pour éviter trop de requêtes qui pourraient désactiver la clé API
+    const modelsToTry = FREE_MODELS.slice(0, 5)
     const errors: Array<{ model: string; status: number; text: string }> = []
     let aiResponse = ''
     let responseData: any = null
     
-    for (const model of FREE_MODELS) {
+    console.log(`🔍 Tentative avec ${modelsToTry.length} modèles (sur ${FREE_MODELS.length} disponibles)`)
+    
+    for (const model of modelsToTry) {
       console.log(`🔍 Tentative avec le modèle: ${model}`)
       
       try {
