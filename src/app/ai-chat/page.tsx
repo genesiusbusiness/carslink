@@ -334,12 +334,16 @@ export default function AIChatPage() {
         }
         
         // Si c'est une erreur d'authentification OpenRouter, afficher un toast non bloquant
-        if (data.warnings && data.warnings.includes('OPENROUTER_AUTH')) {
-          toast({
-            title: "Erreur d'authentification OpenRouter",
-            description: "La clé API OpenRouter n'est pas valide. Vérifiez la configuration.",
-            variant: "destructive",
-          })
+        if (data.warnings && Array.isArray(data.warnings) && data.warnings.includes('OPENROUTER_AUTH')) {
+          try {
+            toast({
+              title: "Erreur d'authentification OpenRouter",
+              description: "La clé API OpenRouter n'est pas valide. Vérifiez la configuration.",
+              variant: "destructive",
+            })
+          } catch (toastError: any) {
+            console.error('❌ Erreur lors de l\'affichage du toast:', toastError)
+          }
         }
       }
       
@@ -393,22 +397,26 @@ export default function AIChatPage() {
       }
       
       // Si on a des warnings mais aussi une réponse, afficher un toast non bloquant
-      if (data.warnings && data.warnings.length > 0 && data.message && data.message.content) {
-        data.warnings.forEach((warning: string) => {
-          if (warning === 'OPENROUTER_AUTH') {
-            toast({
-              title: "Avertissement",
-              description: "Erreur d'authentification OpenRouter détectée. La réponse peut être limitée.",
-              variant: "destructive",
-            })
-          } else {
-            toast({
-              title: "Avertissement",
-              description: `Warning: ${warning}`,
-              variant: "default",
-            })
-          }
-        })
+      if (data.warnings && Array.isArray(data.warnings) && data.warnings.length > 0 && data.message && data.message.content) {
+        try {
+          data.warnings.forEach((warning: string) => {
+            if (warning === 'OPENROUTER_AUTH') {
+              toast({
+                title: "Avertissement",
+                description: "Erreur d'authentification OpenRouter détectée. La réponse peut être limitée.",
+                variant: "destructive",
+              })
+            } else {
+              toast({
+                title: "Avertissement",
+                description: `Warning: ${warning}`,
+                variant: "default",
+              })
+            }
+          })
+        } catch (toastError: any) {
+          console.error('❌ Erreur lors de l\'affichage du toast:', toastError)
+        }
       }
       
       // Log de la réponse complète pour débogage
