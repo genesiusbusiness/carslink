@@ -1415,8 +1415,8 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       suggestedQuestions: aiAnalysis.suggested_questions || [],
     }
     
-    // Si c'est un message d'indisponibilité, inclure les détails de l'erreur pour débogage
-    if (aiResponse.includes('temporairement indisponible') && (aiAnalysis as any).error_details) {
+    // Toujours inclure les détails de l'erreur si disponible (pour débogage)
+    if ((aiAnalysis as any).error_details) {
       responseData.error_details = (aiAnalysis as any).error_details
       console.log('⚠️ Détails de l\'erreur inclus dans la réponse:', (aiAnalysis as any).error_details)
     }
