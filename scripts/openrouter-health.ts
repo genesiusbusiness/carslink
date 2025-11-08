@@ -14,17 +14,16 @@
  * - Un appel test à l'API OpenRouter
  */
 
-import * as dotenv from 'dotenv'
-import * as path from 'path'
-
 // Charger les variables d'environnement depuis .env.local si disponible
-if (dotenv && path) {
+// Note: dotenv est optionnel, les variables d'environnement peuvent être chargées autrement
+try {
+  const dotenv = require('dotenv')
+  const path = require('path')
   const envPath = path.join(process.cwd(), '.env.local')
-  try {
-    dotenv.config({ path: envPath })
-  } catch (e) {
-    // Ignorer si .env.local n'existe pas
-  }
+  dotenv.config({ path: envPath })
+} catch (e) {
+  // Ignorer si dotenv n'est pas installé ou si .env.local n'existe pas
+  // Les variables d'environnement peuvent être chargées depuis le système
 }
 
 // Variables d'environnement requises
