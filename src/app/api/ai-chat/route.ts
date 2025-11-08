@@ -1,46 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/client'
 import { createClient } from '@supabase/supabase-js'
+import { 
+  FREE_MODELS, 
+  callOpenRouter, 
+  ensureServerEnv 
+} from '@/lib/ai/openrouter'
 
 // Configuration de l'API IA
 // Utilise les variables d'environnement AWS Amplify, avec fallback pour le développement local
 const AI_API_PROVIDER = 'openrouter'
-
-// Fonction pour obtenir la configuration OpenRouter de manière sécurisée
-function getOpenRouterConfig() {
-  // Utiliser les variables d'environnement avec fallbacks
-  const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
-  const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
-  const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
-  const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
-  const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || OPENROUTER_SITE_URL
-  const OPENROUTER_APP_TITLE = process.env.OPENROUTER_APP_TITLE || 'CarsLink Assistant'
-  
-  // Vérifier que la clé API est présente
-  if (!AI_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY is required')
-  }
-  
-  return {
-    AI_API_KEY,
-    AI_API_BASE_URL,
-    AI_API_URL,
-    OPENROUTER_SITE_URL,
-    OPENROUTER_REFERER,
-    OPENROUTER_APP_TITLE,
-  }
-}
-
-// Utiliser un modèle gratuit et disponible
-// Essayer plusieurs modèles gratuits selon disponibilité
-// Modèles gratuits disponibles sur OpenRouter : meta-llama/llama-3.2-3b-instruct:free, google/gemini-flash-1.5:free, mistralai/mistral-7b-instruct:free
-// Liste de modèles à essayer en cas d'échec (du plus fiable au moins fiable)
-// Note: meta-llama/llama-3.2-3b-instruct:free est souvent rate-limited, donc retiré
-const AI_MODELS = [
-  'google/gemini-flash-1.5:free', // Le plus fiable
-  'mistralai/mistral-7b-instruct:free',
-]
-const AI_MODEL = AI_MODELS[0] // Modèle par défaut
 
 // Supabase Admin pour les opérations serveur
 // Créer le client Supabase Admin de manière sécurisée
@@ -98,28 +67,19 @@ async function analyzeProblemWithAI(
   vehicles: Array<{id: string, brand: string, model: string, license_plate: string, year: number, fuel_type: string}> = [],
   profile: {first_name: string, last_name: string, email: string, phone: string} | null = null
 ): Promise<AIAnalysis> {
-  // Obtenir la configuration OpenRouter de manière sécurisée
-  let config
+  // Vérifier que les variables d'environnement sont configurées
   try {
-    config = getOpenRouterConfig()
+    ensureServerEnv()
   } catch (configError: any) {
-    console.error('❌ Erreur lors de la récupération de la configuration OpenRouter:', configError)
+    console.error('❌ Erreur lors de la vérification de la configuration OpenRouter:', configError)
     throw new Error(`Configuration OpenRouter invalide: ${configError.message}`)
   }
   
   console.log('🔍 Configuration IA au début de analyzeProblemWithAI:', {
     provider: AI_API_PROVIDER,
-    model: AI_MODEL,
-    url: config.AI_API_URL,
-    apiKeyLength: config.AI_API_KEY?.length || 0,
-    apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...` : 'N/A',
-    apiKeySuffix: config.AI_API_KEY ? `...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 10)}` : 'N/A',
-    apiKeyFull: config.AI_API_KEY, // Log complet pour débogage
-    apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
-    apiKeyFromEnvValue: process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'N/A',
-    apiKeyFromEnvLength: process.env.OPENROUTER_API_KEY?.length || 0,
-    referer: config.OPENROUTER_REFERER,
-    siteUrl: config.OPENROUTER_SITE_URL,
+    modelsCount: FREE_MODELS.length,
+    apiKeyLength: process.env.OPENROUTER_API_KEY?.length || 0,
+    apiKeyPrefix: process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'N/A',
     userMessage: userMessage.substring(0, 50),
   })
 
@@ -387,207 +347,84 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
     : `${clientContext}\n\n🔴 LANGUE OBLIGATOIRE : Tu DOIS répondre en FRANÇAIS. Toutes tes questions, options, diagnostics, et analyses doivent être en français. Ne réponds JAMAIS en anglais.\n\nLe client décrit ce problème: "${userMessage}"\n\n🔴 PREMIÈRE ÉTAPE CRITIQUE - DÉTECTION AUTOMATIQUE DU SUJET :\nAvant de répondre, analyse le message du client et réfléchis : est-ce que ce message concerne un véhicule, un garage, un problème automobile, ou un service CarsLink ?\n\nSi NON (ex: pizza, recette, film, livre, musique, téléphone, ordinateur, etc.) → c'est HORS SUJET.\nRetourne IMMÉDIATEMENT :\n{\n  "needs_more_info": false,\n  "diagnostic_complete": false,\n  "suggested_questions": [],\n  "is_off_topic": true,\n  "causes": [],\n  "urgency": null,\n  "recommended_service": null\n}\n\nNe pose JAMAIS de questions si c'est hors sujet. Utilise ton intelligence pour comprendre que CarsLink est une application automobile, pas un service général.\n\n⚠️ RÈGLE CRITIQUE : Si le message est AUTOMOBILE, c'est le PREMIER message du client (conversation vide). Tu DOIS TOUJOURS poser des questions guidées (needs_more_info = true) AVANT de donner un diagnostic complet. Ne donne JAMAIS un diagnostic complet au premier message, sauf si c'est une urgence vitale (fumée, feu, freins complètement défaillants).\n\nIMPORTANT: Si le client a plusieurs véhicules dans son profil (voir ci-dessus), demande d'abord "Pour quelle voiture ?" avec UNIQUEMENT les véhicules RÉELS de son profil comme options. N'utilise JAMAIS d'exemples fictifs ou de véhicules qui ne sont pas dans la liste ci-dessus. Si le client a un seul véhicule ou aucun, pose directement des questions ciblées pour identifier précisément le problème.`
 
   try {
-    let response: Response | null = null
-    let responseData: any
-
-    if (AI_API_PROVIDER === 'openrouter') {
-      // Test simple de connectivité OpenRouter avant d'essayer les modèles
-      console.log('🔍 Test de connectivité OpenRouter...')
+    // Rotation/fallback sur les modèles **gratuits** uniquement
+    const errors: Array<{ model: string; status: number; text: string }> = []
+    let aiResponse = ''
+    let responseData: any = null
+    
+    for (const model of FREE_MODELS) {
+      console.log(`🔍 Tentative avec le modèle: ${model}`)
+      
       try {
-        const testResponse = await fetch(`${config.AI_API_BASE_URL}/models`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${config.AI_API_KEY}`,
-          },
-          signal: AbortSignal.timeout(5000), // 5 secondes pour le test
-        })
-        console.log('✅ Test de connectivité OpenRouter:', {
-          status: testResponse.status,
-          ok: testResponse.ok,
-        })
-      } catch (testError: any) {
-        console.error('❌ Test de connectivité OpenRouter échoué:', testError.message)
-        // Continuer quand même, peut-être que c'est juste le endpoint /models qui ne fonctionne pas
-      }
-      
-      // Essayer plusieurs modèles en cas d'échec
-      let lastError: Error | null = null
-      let success = false
-      
-      for (let modelIndex = 0; modelIndex < AI_MODELS.length && !success; modelIndex++) {
-        const currentModel = AI_MODELS[modelIndex]
-        console.log(`🔍 Tentative ${modelIndex + 1}/${AI_MODELS.length} avec le modèle: ${currentModel}`)
+        const result = await callOpenRouter(
+          model,
+          [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          {
+            temperature: 0.7,
+            max_tokens: 1500,
+            timeout: 15000,
+          }
+        )
         
-        try {
-          // Créer un AbortController pour gérer le timeout
-          // Réduire le timeout à 15 secondes pour AWS Amplify (qui a souvent un timeout plus court)
-          const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 secondes de timeout
-          
-          console.log(`📤 Envoi de la requête à OpenRouter avec le modèle ${currentModel}...`)
-          console.log(`🔑 Clé API utilisée: ${config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 5)}` : 'NON DÉFINIE'} (longueur: ${config.AI_API_KEY?.length || 0})`)
-          console.log(`🔑 Clé API complète (pour débogage): ${config.AI_API_KEY}`)
-          console.log(`🔑 Clé API depuis env: ${process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'NON DÉFINIE'}`)
-          console.log(`🔗 URL: ${config.AI_API_URL}`)
-          console.log(`🔗 Referer: ${config.OPENROUTER_REFERER}`)
-          console.log(`🔗 Site URL: ${config.OPENROUTER_SITE_URL}`)
-          const requestStartTime = Date.now()
-          
-          // Construire les headers - utiliser Referer si HTTP-Referer n'est pas supporté
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${config.AI_API_KEY}`,
-            'X-Title': config.OPENROUTER_APP_TITLE,
-          }
-          
-          // Essayer HTTP-Referer d'abord, puis Referer en fallback
-          // Certaines infrastructures ne transmettent pas HTTP-Referer
-          headers['HTTP-Referer'] = config.OPENROUTER_REFERER
-          headers['Referer'] = config.OPENROUTER_REFERER
-          
-          console.log(`📋 Headers envoyés:`, {
-            'Content-Type': headers['Content-Type'],
-            'Authorization': `Bearer ${config.AI_API_KEY.substring(0, 20)}...`,
-            'X-Title': headers['X-Title'],
-            'HTTP-Referer': headers['HTTP-Referer'],
-            'Referer': headers['Referer'],
+        if (result.ok && result.json?.choices?.[0]?.message?.content) {
+          aiResponse = result.json.choices[0].message.content
+          responseData = result.json
+          console.log(`✅ Modèle ${model} a fonctionné !`)
+          break // Succès, sortir de la boucle
+        } else {
+          errors.push({ 
+            model, 
+            status: result.status, 
+            text: result.text || 'Unknown error' 
           })
           
-          try {
-            response = await fetch(config.AI_API_URL, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                model: currentModel,
-                messages: [
-                  { role: 'system', content: systemPrompt }, // Ne pas limiter - le prompt est nécessaire
-                  { role: 'user', content: userPrompt }, // Ne pas limiter - l'historique est nécessaire
-                ],
-                temperature: 0.7,
-                max_tokens: 1500, // Augmenter pour avoir une réponse complète
-              }),
-              signal: controller.signal, // Ajouter le signal pour le timeout
-            })
-            
-            const requestDuration = Date.now() - requestStartTime
-            console.log(`⏱️ Requête OpenRouter terminée en ${requestDuration}ms`)
-            
-            clearTimeout(timeoutId) // Annuler le timeout si la requête réussit
-          } catch (fetchError: any) {
-            clearTimeout(timeoutId)
-            const requestDuration = Date.now() - requestStartTime
-            console.error(`❌ Erreur après ${requestDuration}ms avec le modèle ${currentModel}:`, {
-              name: fetchError.name,
-              message: fetchError.message,
-              cause: fetchError.cause,
-            })
-            
-            if (fetchError.name === 'AbortError') {
-              console.error(`❌ Timeout avec le modèle ${currentModel} (15 secondes)`)
-              lastError = new Error(`OpenRouter API timeout: La requête a pris plus de 15 secondes`)
-              continue // Essayer le modèle suivant
-            }
-            console.error(`❌ Erreur réseau avec le modèle ${currentModel}:`, fetchError)
-            lastError = new Error(`OpenRouter API network error: ${fetchError.message}`)
-            continue // Essayer le modèle suivant
+          // 401/402/429/500/503 → on tente le modèle suivant
+          if (![401, 402, 429, 500, 503, 408].includes(result.status)) {
+            console.warn(`⚠️ Erreur non récupérable (${result.status}) avec ${model}, arrêt des tentatives`)
+            break
           }
           
-          console.log(`✅ Réponse OpenRouter reçue pour ${currentModel}:`, {
-            status: response.status,
-            statusText: response.statusText,
-            ok: response.ok,
-          })
-
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error(`❌ Erreur OpenRouter API avec ${currentModel}:`, response.status, errorText)
-            console.error(`❌ Détails de l'erreur:`, {
-              status: response.status,
-              statusText: response.statusText,
-              errorText: errorText,
-              apiKeyLength: config.AI_API_KEY?.length || 0,
-              apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...` : 'N/A',
-              apiKeySuffix: config.AI_API_KEY ? `...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 10)}` : 'N/A',
-              apiKeyFull: config.AI_API_KEY, // Log complet pour débogage
-              apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
-              apiKeyFromEnvValue: process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'N/A',
-              url: config.AI_API_URL,
-              referer: config.OPENROUTER_REFERER,
-              siteUrl: config.OPENROUTER_SITE_URL,
-              headers: {
-                'Authorization': `Bearer ${config.AI_API_KEY.substring(0, 20)}...`,
-                'HTTP-Referer': config.OPENROUTER_REFERER,
-                'Referer': config.OPENROUTER_REFERER,
-                'X-Title': config.OPENROUTER_APP_TITLE,
-              },
-            })
-            
-            // Gérer les erreurs d'authentification (401, 403) de manière spécifique
-            if (response.status === 401 || response.status === 403) {
-              let parsedError: any = {}
-              try {
-                parsedError = JSON.parse(errorText)
-              } catch {
-                parsedError = { message: errorText }
-              }
-              
-              lastError = new Error(`OpenRouter API error: ${response.status} - ${JSON.stringify(parsedError)}`)
-              // Ne pas réessayer pour les erreurs d'authentification
-              break
-            }
-            
-            // Si c'est une erreur 429 (rate limit), essayer le modèle suivant
-            if (response.status === 429) {
-              console.warn(`⚠️ Rate limit (429) avec le modèle ${currentModel}, essai du modèle suivant...`)
-              lastError = new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
-              continue // Essayer le modèle suivant au lieu de s'arrêter
-            }
-            
-            // Pour les autres erreurs, essayer le modèle suivant
-            lastError = new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
-            continue
-          }
-          
-          // Si on arrive ici, la requête a réussi
-          success = true
-          console.log(`✅ Modèle ${currentModel} a fonctionné !`)
-          
-        } catch (modelError: any) {
-          console.error(`❌ Erreur avec le modèle ${currentModel}:`, modelError)
-          lastError = modelError
-          continue // Essayer le modèle suivant
+          console.warn(`⚠️ Erreur ${result.status} avec ${model}, essai du modèle suivant...`)
         }
+      } catch (error: any) {
+        console.error(`❌ Erreur avec le modèle ${model}:`, error.message)
+        errors.push({ 
+          model, 
+          status: 500, 
+          text: error.message || 'Unknown error' 
+        })
+        // Continuer avec le modèle suivant
       }
+    }
+    
+    // Si aucun modèle n'a fonctionné
+    if (!aiResponse) {
+      console.error('❌ Tous les modèles gratuits ont échoué. Erreurs:', errors)
+      throw new Error(`OpenRouter fallback failed: ${errors.map(e => `${e.model} (${e.status})`).join(', ')}`)
+    }
+    
+    console.log('📥 Réponse OpenRouter complète:', {
+      hasChoices: !!responseData?.choices,
+      choicesCount: responseData?.choices?.length || 0,
+      hasContent: !!aiResponse,
+      contentLength: aiResponse.length,
+    })
       
-      // Si aucun modèle n'a fonctionné, lancer l'erreur
-      if (!success || !response) {
-        console.error('❌ Tous les modèles ont échoué. Dernière erreur:', lastError)
-        throw lastError || new Error('Tous les modèles OpenRouter ont échoué')
-      }
+    if (!aiResponse) {
+      console.error('❌ Réponse OpenRouter vide:', JSON.stringify(responseData, null, 2))
+      throw new Error('OpenRouter API returned empty response')
+    }
+    
+    console.log('✅ Contenu de la réponse IA reçu:', {
+      length: aiResponse.length,
+      preview: aiResponse.substring(0, 200),
+    })
 
-      responseData = await response.json()
-      console.log('📥 Réponse OpenRouter complète:', {
-        hasChoices: !!responseData.choices,
-        choicesCount: responseData.choices?.length || 0,
-        hasContent: !!responseData.choices?.[0]?.message?.content,
-        contentLength: responseData.choices?.[0]?.message?.content?.length || 0,
-        responseKeys: Object.keys(responseData),
-      })
-      
-      const aiResponse = responseData.choices?.[0]?.message?.content || ''
-      
-      if (!aiResponse) {
-        console.error('❌ Réponse OpenRouter vide:', JSON.stringify(responseData, null, 2))
-        throw new Error('OpenRouter API returned empty response')
-      }
-      
-      console.log('✅ Contenu de la réponse IA reçu:', {
-        length: aiResponse.length,
-        preview: aiResponse.substring(0, 200),
-      })
-
-      // Parser la réponse JSON
-      try {
+    // Parser la réponse JSON
+    try {
         console.log('🔍 Tentative de parsing de la réponse IA...')
         const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
         if (!jsonMatch) {
@@ -820,271 +657,14 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           aiResponse: aiResponse.substring(0, 1000),
         })
         // Ne pas retourner de questions pré-définies - l'IA doit tout générer dynamiquement
-        return {
-          causes: [],
-          urgency: null,
-          recommended_service: null,
-          needs_more_info: true,
-          diagnostic_complete: false,
-          suggested_questions: [], // Vide - l'IA doit générer ses propres questions
-        }
+      return {
+        causes: [],
+        urgency: null,
+        recommended_service: null,
+        needs_more_info: true,
+        diagnostic_complete: false,
+        suggested_questions: [], // Vide - l'IA doit générer ses propres questions
       }
-    } else if (AI_API_PROVIDER === 'huggingface') {
-      // Utiliser Hugging Face Inference API
-      const config = getOpenRouterConfig()
-      response = await fetch(
-        `https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${config.AI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            inputs: `${systemPrompt}\n\n${userPrompt}`,
-            parameters: {
-              max_new_tokens: 500,
-              temperature: 0.7,
-            },
-          }),
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(`Hugging Face API error: ${response.status}`)
-      }
-
-      responseData = await response.json()
-      const aiResponse = Array.isArray(responseData) 
-        ? responseData[0]?.generated_text || ''
-        : responseData.generated_text || ''
-
-      // Parser la réponse (même logique que pour OpenRouter)
-      try {
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
-        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(aiResponse)
-        
-        // Traiter les questions suggérées et remplacer les références aux véhicules
-        let processedQuestions = parsed.suggested_questions || []
-        
-        console.log('🔍 AVANT REMPLACEMENT - Questions reçues de l\'IA:', JSON.stringify(processedQuestions, null, 2))
-        
-        // TOUJOURS remplacer les options de véhicules par les véhicules RÉELS du client (même avec 1 seul véhicule)
-        if (vehicles.length > 0 && Array.isArray(processedQuestions)) {
-          const vehicleOptions = vehicles.map(v => {
-            return `${v.brand} ${v.model}${v.year ? ` (${v.year})` : ''}${v.license_plate ? ` - ${v.license_plate}` : ''}`
-          })
-          
-          console.log('🚗 Véhicules disponibles pour remplacement:', vehicleOptions)
-          
-          processedQuestions = processedQuestions.map((q: any, qIndex: number) => {
-            console.log(`\n🔍 Traitement question ${qIndex + 1}:`, {
-              type: typeof q,
-              question: q?.question,
-              options: q?.options,
-              isObject: typeof q === 'object',
-              hasQuestion: !!q?.question,
-              hasOptions: !!q?.options
-            })
-            
-            if (typeof q === 'object' && q.question && q.options) {
-              // Si la question concerne le véhicule, remplacer TOUJOURS les options par les véhicules RÉELS du client
-              const questionLower = q.question.toLowerCase()
-              
-              // Détecter si c'est une question sur les véhicules (plus précis)
-              // Ne remplacer que si la question contient explicitement des mots liés aux véhicules
-              const hasVehicleKeywords = (
-                questionLower.includes('quelle voiture') || 
-                questionLower.includes('quel véhicule') ||
-                questionLower.includes('pour quelle voiture') ||
-                questionLower.includes('pour quel véhicule') ||
-                questionLower.includes('quelle auto') ||
-                questionLower.includes('quel auto') ||
-                (questionLower.includes('voiture') && (questionLower.includes('quelle') || questionLower.includes('quel'))) ||
-                (questionLower.includes('véhicule') && (questionLower.includes('quelle') || questionLower.includes('quel'))) ||
-                (questionLower.includes('auto') && (questionLower.includes('quelle') || questionLower.includes('quel')))
-              )
-              
-              // Détecter aussi si les options contiennent "voiture 1", "véhicule 1", "je n'en ai qu'une", etc.
-              const hasVehicleOptions = Array.isArray(q.options) && q.options.some((opt: string) => {
-                if (typeof opt !== 'string') return false
-                const optLower = opt.toLowerCase()
-                return /voiture\s*[0-9]/i.test(opt) || 
-                       /véhicule\s*[0-9]/i.test(opt) ||
-                       optLower.includes('voiture 1') || 
-                       optLower.includes('voiture 2') || 
-                       optLower.includes('voiture 3') ||
-                       optLower.includes('véhicule 1') ||
-                       optLower.includes('véhicule 2') ||
-                       optLower.includes('véhicule 3') ||
-                       optLower.includes("je n'en ai qu'une") ||
-                       optLower.includes("j'en ai qu'une")
-              })
-              
-              const isVehicleQuestion = hasVehicleKeywords || hasVehicleOptions
-              
-              console.log(`  Détection pour question ${qIndex + 1}:`, {
-                question: q.question,
-                hasVehicleKeywords,
-                hasVehicleOptions,
-                isVehicleQuestion,
-                optionsSample: Array.isArray(q.options) ? q.options.slice(0, 3) : 'N/A',
-                allOptions: q.options
-              })
-              
-              // FORCER le remplacement si c'est une question sur les véhicules OU si les options contiennent des labels fictifs
-              if (isVehicleQuestion) {
-                console.log(`✅ REMPLACEMENT FORCÉ pour question ${qIndex + 1}:`, {
-                  question: q.question,
-                  optionsOriginales: q.options,
-                  optionsRemplacees: vehicleOptions
-                })
-                return {
-                  question: q.question,
-                  options: vehicleOptions
-                }
-              } else {
-                console.log(`  ⏭️ Question ${qIndex + 1} n'est pas une question sur les véhicules`)
-              }
-              
-              // FORCER le remplacement même si la détection échoue mais que les options contiennent des numéros
-              // (sécurité supplémentaire)
-              if (Array.isArray(q.options) && q.options.length > 0) {
-                const hasNumberedOptions = q.options.some((opt: string) => {
-                  if (typeof opt !== 'string') return false
-                  return /[0-9]/.test(opt) && (opt.toLowerCase().includes('voiture') || opt.toLowerCase().includes('véhicule'))
-                })
-                
-                if (hasNumberedOptions && vehicles.length > 0) {
-                  console.log(`⚠️ Détection de sécurité : options numérotées détectées, remplacement forcé pour question ${qIndex + 1}`)
-                  return {
-                    question: q.question,
-                    options: vehicleOptions
-                  }
-                }
-              }
-            } else {
-              console.log(`  ⚠️ Question ${qIndex + 1} n'a pas le format attendu`)
-            }
-            return q
-          })
-          
-          console.log('🔍 APRÈS REMPLACEMENT - Questions traitées:', JSON.stringify(processedQuestions, null, 2))
-        } else {
-          console.warn('⚠️ Pas de remplacement possible:', {
-            vehiclesLength: vehicles.length,
-            processedQuestionsIsArray: Array.isArray(processedQuestions),
-            processedQuestionsLength: processedQuestions?.length || 0
-          })
-        }
-        
-        // S'assurer que toutes les questions ont des options
-        const finalQuestions = processedQuestions.map((q: any) => {
-          if (typeof q === 'string') {
-            // Si c'est juste une string, créer un objet avec des options par défaut
-            return {
-              question: q,
-              options: ['Oui', 'Non', 'Je ne sais pas']
-            }
-          }
-          if (typeof q === 'object' && q.question) {
-            // Si c'est un objet mais sans options, ajouter des options par défaut
-            if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
-              console.warn(`⚠️ Question sans options détectée: "${q.question}", ajout d'options par défaut`)
-              return {
-                question: q.question,
-                options: ['Oui', 'Non', 'Je ne sais pas']
-              }
-            }
-            return q
-          }
-          return q
-        })
-
-        console.log('✅ Questions finales avec options garanties:', JSON.stringify(finalQuestions, null, 2))
-
-        // Nettoyer le recommended_service pour ne garder qu'un seul service
-        let cleanedRecommendedService = parsed.recommended_service || null
-        if (cleanedRecommendedService) {
-          // Si le service contient plusieurs services séparés par des virgules, des "ou", etc.
-          // Extraire seulement le premier service
-          const serviceString = cleanedRecommendedService.toString().trim()
-          
-          // Détecter si plusieurs services sont présents (virgule, "ou", "et", etc.)
-          if (serviceString.includes(',') || 
-              serviceString.includes(' ou ') || 
-              serviceString.includes(' et ') ||
-              serviceString.includes(' / ') ||
-              serviceString.includes(' | ')) {
-            // Extraire tous les services
-            const services = serviceString
-              .split(/[,/|]| ou | et /i)
-              .map((s: string) => s.trim())
-              .filter((s: string) => s.length > 0)
-            
-            // Choisir le service le plus évident selon la logique :
-            // 1. Les services spécifiques sont plus prioritaires que le diagnostic générique
-            // 2. "Contrôle freinage" est plus spécifique que "Diagnostic électronique" pour les problèmes de freinage
-            // 3. Prioriser les services spécifiques sur les génériques
-            const servicePriority: Record<string, number> = {
-              'contrôle freinage': 1, // Plus spécifique, priorité la plus haute
-              'contrôle technique': 1,
-              'réparation moteur': 1,
-              'réparation carrosserie': 1,
-              'vidange': 2,
-              'diagnostic électronique': 3, // Service générique, moins prioritaire
-            }
-            
-            // Trouver le service le plus prioritaire
-            let bestService = services[0] // Par défaut, le premier
-            let bestPriority = servicePriority[services[0]?.toLowerCase()] || 999
-            
-            for (const service of services) {
-              const serviceLower = service.toLowerCase()
-              const priority = servicePriority[serviceLower] || 999
-              
-              // Si on trouve un service plus prioritaire (nombre plus petit = plus prioritaire)
-              if (priority < bestPriority) {
-                bestService = service
-                bestPriority = priority
-              }
-            }
-            
-            console.log('⚠️ Plusieurs services détectés, sélection du service le plus évident (Hugging Face):', {
-              original: serviceString,
-              services: services,
-              selected: bestService,
-              priority: bestPriority
-            })
-            
-            cleanedRecommendedService = bestService
-          }
-        }
-
-        return {
-          causes: parsed.causes || [],
-          urgency: parsed.urgency || null,
-          recommended_service: cleanedRecommendedService,
-          service_id: cleanedRecommendedService ? (SERVICE_MAPPING[cleanedRecommendedService?.toLowerCase()] || 'diagnostic') : undefined,
-          needs_more_info: parsed.needs_more_info || false,
-          diagnostic_complete: parsed.diagnostic_complete || false,
-          suggested_questions: finalQuestions,
-        }
-      } catch (parseError) {
-        // Fallback si le parsing échoue - retourner des questions vides pour forcer l'IA à générer
-        console.error('❌ Erreur lors du parsing de la réponse IA (Hugging Face):', parseError)
-        // Ne pas retourner de questions pré-définies - l'IA doit tout générer dynamiquement
-        return {
-          causes: [],
-          urgency: null,
-          recommended_service: null,
-          needs_more_info: true,
-          diagnostic_complete: false,
-          suggested_questions: [], // Vide - l'IA doit générer ses propres questions
-        }
-      }
-    } else {
-      throw new Error(`Unsupported AI provider: ${AI_API_PROVIDER}`)
     }
   } catch (error: any) {
     console.error('❌ Erreur lors de l\'analyse IA:', error)
@@ -1280,7 +860,7 @@ export async function POST(request: NextRequest) {
 
     // Vérifier la configuration OpenRouter avant d'appeler l'IA
     try {
-      getOpenRouterConfig()
+      ensureServerEnv()
     } catch (configError: any) {
       console.error('❌ Erreur de configuration OpenRouter:', configError)
       return NextResponse.json(
@@ -1481,28 +1061,15 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       }
     } catch (aiError: any) {
       console.error('❌ Erreur lors de l\'analyse IA:', aiError)
-      let config
-      try {
-        config = getOpenRouterConfig()
-      } catch (configError: any) {
-        console.error('❌ Erreur lors de la récupération de la configuration OpenRouter dans le catch:', configError)
-        config = {
-          AI_API_KEY: 'N/A',
-          AI_API_URL: 'N/A',
-          OPENROUTER_REFERER: 'N/A',
-          OPENROUTER_SITE_URL: 'N/A',
-        }
-      }
       console.error('❌ Détails de l\'erreur:', {
         message: aiError.message,
         stack: aiError.stack,
         name: aiError.name,
         response: aiError.response,
         status: aiError.status,
-        apiKeyLength: config.AI_API_KEY?.length || 0,
-        apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
-        url: config.AI_API_URL,
-        model: AI_MODEL,
+        apiKeyLength: process.env.OPENROUTER_API_KEY?.length || 0,
+        apiKeyPrefix: process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
+        modelsCount: FREE_MODELS.length,
         provider: AI_API_PROVIDER,
       })
       
