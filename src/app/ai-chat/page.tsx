@@ -1058,6 +1058,23 @@ export default function AIChatPage() {
                     onClick={async () => {
                       if (!user || isLoading) return
                       
+                      // Attendre que les véhicules soient chargés (maximum 5 secondes)
+                      let waitCount = 0
+                      while ((!vehicles || vehicles.length === 0) && waitCount < 50) {
+                        await new Promise(resolve => setTimeout(resolve, 100))
+                        waitCount++
+                      }
+                      
+                      // Vérifier que les véhicules sont bien chargés après l'attente
+                      if (!vehicles || vehicles.length === 0) {
+                        toast({
+                          title: "Aucun véhicule trouvé",
+                          description: "Veuillez ajouter un véhicule dans votre profil avant de commencer une conversation.",
+                          variant: "destructive",
+                        })
+                        return
+                      }
+                      
                       setIsLoading(true)
                       const userMessage = suggestion.trim()
                       
@@ -1072,16 +1089,6 @@ export default function AIChatPage() {
                       setMessages((prev) => [...prev, tempUserMessage])
                       
                       try {
-                        // Vérifier que les véhicules sont bien chargés
-                        if (!vehicles || vehicles.length === 0) {
-                          toast({
-                            title: "Aucun véhicule trouvé",
-                            description: "Veuillez ajouter un véhicule dans votre profil.",
-                            variant: "destructive",
-                          })
-                          setIsLoading(false)
-                          return
-                        }
                         
                         // Préparer les véhicules à envoyer
                         const vehiclesPayload = vehicles.map(v => ({
@@ -1184,6 +1191,45 @@ export default function AIChatPage() {
                           setSelectedAnswers(new Map()) // Réinitialiser les sélections
                         }
 
+                        // Vérifier si l'API a retourné un message d'erreur générique
+                        if (data.message?.content?.includes('temporairement indisponible') || 
+                            (data.analysis?.error_details && !data.analysis.recommended_service)) {
+                          console.warn('⚠️ Message d\'erreur détecté dans la réponse:', data.message?.content)
+                          console.warn('⚠️ Détails de l\'erreur:', data.analysis?.error_details)
+                          
+                          // Afficher un message d'erreur plus informatif
+                          const errorDetails = data.analysis?.error_details
+                          let errorContent = 'Une erreur est survenue lors de la communication avec l\'IA. Veuillez réessayer dans quelques instants.'
+                          
+                          if (errorDetails?.message) {
+                            if (errorDetails.message.includes('429') || errorDetails.message.includes('rate limit')) {
+                              errorContent = '⚠️ Le service est temporairement surchargé. Veuillez réessayer dans quelques instants.'
+                            } else if (errorDetails.message.includes('401') || errorDetails.message.includes('403')) {
+                              errorContent = '⚠️ Erreur d\'authentification avec le service IA. Veuillez contacter le support.'
+                            } else if (errorDetails.message.includes('timeout')) {
+                              errorContent = '⚠️ La requête a pris trop de temps. Veuillez réessayer.'
+                            } else {
+                              errorContent = `⚠️ Erreur: ${errorDetails.message}`
+                            }
+                          }
+                          
+                          const errorMessage: AIChatMessage = {
+                            id: `error-${Date.now()}`,
+                            conversation_id: conversationId || '',
+                            role: 'assistant',
+                            content: errorContent,
+                            created_at: new Date().toISOString(),
+                          }
+                          
+                          setMessages((prev) => {
+                            const filtered = prev.filter((msg) => msg.id !== tempUserMessage.id)
+                            return [...filtered, errorMessage]
+                          })
+                          
+                          setIsLoading(false)
+                          return
+                        }
+                        
                         if (data.analysis && data.analysis.recommended_service) {
                           setApiAvailable(true)
                         }
