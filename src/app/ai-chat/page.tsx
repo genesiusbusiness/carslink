@@ -317,6 +317,7 @@ export default function AIChatPage() {
       }
 
       // Vérifier si la réponse contient une erreur ou un message d'indisponibilité
+      // MAIS afficher quand même la réponse si elle existe
       if (data.message && data.message.content && data.message.content.includes('temporairement indisponible')) {
         console.error('⚠️ Message d\'indisponibilité détecté dans la réponse:', data.message.content)
         console.error('⚠️ Analyse reçue:', data.analysis)
@@ -330,6 +331,15 @@ export default function AIChatPage() {
           console.error('❌ Stack trace:', data.error_details.stack)
         } else {
           console.warn('⚠️ Aucun détail d\'erreur disponible dans la réponse')
+        }
+        
+        // Si c'est une erreur d'authentification OpenRouter, afficher un toast non bloquant
+        if (data.warnings && data.warnings.includes('OPENROUTER_AUTH')) {
+          toast({
+            title: "Erreur d'authentification OpenRouter",
+            description: "La clé API OpenRouter n'est pas valide. Vérifiez la configuration.",
+            variant: "destructive",
+          })
         }
       }
       
@@ -377,8 +387,28 @@ export default function AIChatPage() {
       }
 
       // Vérifier si l'API est disponible
-      if (data.analysis && data.analysis.recommended_service) {
+      // L'API est disponible si on a une réponse (même avec warnings)
+      if (data.message && data.message.content) {
         setApiAvailable(true)
+      }
+      
+      // Si on a des warnings mais aussi une réponse, afficher un toast non bloquant
+      if (data.warnings && data.warnings.length > 0 && data.message && data.message.content) {
+        data.warnings.forEach((warning: string) => {
+          if (warning === 'OPENROUTER_AUTH') {
+            toast({
+              title: "Avertissement",
+              description: "Erreur d'authentification OpenRouter détectée. La réponse peut être limitée.",
+              variant: "destructive",
+            })
+          } else {
+            toast({
+              title: "Avertissement",
+              description: `Warning: ${warning}`,
+              variant: "default",
+            })
+          }
+        })
       }
       
       // Log de la réponse complète pour débogage
@@ -1580,7 +1610,7 @@ export default function AIChatPage() {
           />
           <Button
             onClick={() => sendMessage()}
-            disabled={!inputMessage.trim() || isLoading || !apiAvailable}
+            disabled={!inputMessage.trim() || isLoading}
             className="h-[44px] w-[44px] rounded-full bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transition-all"
           >
             <Send className="h-4 w-4 text-white" />

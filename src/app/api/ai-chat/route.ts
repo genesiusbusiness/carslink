@@ -1,17 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/client'
 import { createClient } from '@supabase/supabase-js'
+import { assertEnv, getEnvOrThrow } from '@/lib/server/assertEnv'
 
 // Configuration de l'API IA
 // Utilise les variables d'environnement AWS Amplify, avec fallback pour le développement local
 const AI_API_PROVIDER = 'openrouter'
-// Utiliser les variables d'environnement AWS Amplify, avec fallback hardcodé pour localhost
-// Supporte aussi OPENROUTER_BASE_UR (sans L) pour compatibilité avec AWS configuré
-const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
-const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
-const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
-const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
-const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || OPENROUTER_SITE_URL
+
+// Fonction pour obtenir la configuration OpenRouter de manière sécurisée
+function getOpenRouterConfig() {
+  // Vérifier les variables d'environnement requises
+  const envCheck = assertEnv(['OPENROUTER_API_KEY'])
+  
+  if (!envCheck.allPresent) {
+    // En production, on exige les variables d'environnement
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(`Variables d'environnement manquantes: ${envCheck.missing.join(', ')}`)
+    }
+    // En développement, utiliser les fallbacks
+  }
+  
+  const AI_API_KEY = getEnvOrThrow('OPENROUTER_API_KEY', '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')
+  const AI_API_BASE_URL = getEnvOrThrow('OPENROUTER_BASE_URL', process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1')
+  const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
+  const OPENROUTER_SITE_URL = getEnvOrThrow('OPENROUTER_SITE_URL', process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com')
+  const OPENROUTER_REFERER = getEnvOrThrow('OPENROUTER_REFERER', OPENROUTER_SITE_URL)
+  const OPENROUTER_APP_TITLE = getEnvOrThrow('OPENROUTER_APP_TITLE', 'CarsLink Assistant')
+  
+  return {
+    AI_API_KEY,
+    AI_API_BASE_URL,
+    AI_API_URL,
+    OPENROUTER_SITE_URL,
+    OPENROUTER_REFERER,
+    OPENROUTER_APP_TITLE,
+  }
+}
 
 // Utiliser un modèle gratuit et disponible
 // Essayer plusieurs modèles gratuits selon disponibilité
@@ -80,15 +104,18 @@ async function analyzeProblemWithAI(
   vehicles: Array<{id: string, brand: string, model: string, license_plate: string, year: number, fuel_type: string}> = [],
   profile: {first_name: string, last_name: string, email: string, phone: string} | null = null
 ): Promise<AIAnalysis> {
-  // L'API key est toujours configurée (hardcodée), pas besoin de vérifier
+  // Obtenir la configuration OpenRouter de manière sécurisée
+  const config = getOpenRouterConfig()
+  
   console.log('🔍 Configuration IA au début de analyzeProblemWithAI:', {
     provider: AI_API_PROVIDER,
     model: AI_MODEL,
-    url: AI_API_URL,
-    apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 15)}...` : 'NON DÉFINIE',
-    apiKeyLength: AI_API_KEY ? AI_API_KEY.length : 0,
+    url: config.AI_API_URL,
+    apiKeyLength: config.AI_API_KEY?.length || 0,
+    apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...` : 'N/A',
     apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
-    apiKeyFull: AI_API_KEY, // Log complet pour débogage (à retirer en production)
+    referer: config.OPENROUTER_REFERER,
+    siteUrl: config.OPENROUTER_SITE_URL,
     userMessage: userMessage.substring(0, 50),
   })
 
@@ -363,10 +390,10 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
       // Test simple de connectivité OpenRouter avant d'essayer les modèles
       console.log('🔍 Test de connectivité OpenRouter...')
       try {
-        const testResponse = await fetch('https://openrouter.ai/api/v1/models', {
+        const testResponse = await fetch(`${config.AI_API_BASE_URL}/models`, {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${AI_API_KEY}`,
+            'Authorization': `Bearer ${config.AI_API_KEY}`,
           },
           signal: AbortSignal.timeout(5000), // 5 secondes pour le test
         })
@@ -394,21 +421,27 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 secondes de timeout
           
           console.log(`📤 Envoi de la requête à OpenRouter avec le modèle ${currentModel}...`)
-          console.log(`🔑 Clé API utilisée: ${AI_API_KEY ? `${AI_API_KEY.substring(0, 20)}...${AI_API_KEY.substring(AI_API_KEY.length - 5)}` : 'NON DÉFINIE'} (longueur: ${AI_API_KEY?.length || 0})`)
-          console.log(`🔗 URL: ${AI_API_URL}`)
-          console.log(`🔗 Referer: ${OPENROUTER_REFERER}`)
+          console.log(`🔑 Clé API utilisée: ${config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 5)}` : 'NON DÉFINIE'} (longueur: ${config.AI_API_KEY?.length || 0})`)
+          console.log(`🔗 URL: ${config.AI_API_URL}`)
+          console.log(`🔗 Referer: ${config.OPENROUTER_REFERER}`)
           const requestStartTime = Date.now()
           
+          // Construire les headers - utiliser Referer si HTTP-Referer n'est pas supporté
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.AI_API_KEY}`,
+            'X-Title': config.OPENROUTER_APP_TITLE,
+          }
+          
+          // Essayer HTTP-Referer d'abord, puis Referer en fallback
+          // Certaines infrastructures ne transmettent pas HTTP-Referer
+          headers['HTTP-Referer'] = config.OPENROUTER_REFERER
+          headers['Referer'] = config.OPENROUTER_REFERER
+          
           try {
-            response = await fetch(AI_API_URL, {
+            response = await fetch(config.AI_API_URL, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${AI_API_KEY}`,
-                // Utiliser les variables d'environnement AWS Amplify pour HTTP-Referer
-                'HTTP-Referer': OPENROUTER_REFERER,
-                'X-Title': 'CarsLink AI Assistant',
-              },
+              headers,
               body: JSON.stringify({
                 model: currentModel,
                 messages: [
@@ -457,16 +490,32 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               status: response.status,
               statusText: response.statusText,
               errorText: errorText,
-              apiKeyLength: AI_API_KEY?.length || 0,
-              apiKeyPrefix: AI_API_KEY ? `${AI_API_KEY.substring(0, 20)}...` : 'N/A',
-              apiKeySuffix: AI_API_KEY ? `...${AI_API_KEY.substring(AI_API_KEY.length - 10)}` : 'N/A',
+              apiKeyLength: config.AI_API_KEY?.length || 0,
+              apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...` : 'N/A',
+              apiKeySuffix: config.AI_API_KEY ? `...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 10)}` : 'N/A',
               apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
-              url: AI_API_URL,
-              referer: OPENROUTER_REFERER,
+              url: config.AI_API_URL,
+              referer: config.OPENROUTER_REFERER,
+              siteUrl: config.OPENROUTER_SITE_URL,
+              // Ne pas logger la clé complète pour la sécurité
             })
             
-            // Si c'est une erreur 429 (rate limit) ou 401 (unauthorized), ne pas réessayer
-            if (response.status === 429 || response.status === 401) {
+            // Gérer les erreurs d'authentification (401, 403) de manière spécifique
+            if (response.status === 401 || response.status === 403) {
+              let parsedError: any = {}
+              try {
+                parsedError = JSON.parse(errorText)
+              } catch {
+                parsedError = { message: errorText }
+              }
+              
+              lastError = new Error(`OpenRouter API error: ${response.status} - ${JSON.stringify(parsedError)}`)
+              // Ne pas réessayer pour les erreurs d'authentification
+              break
+            }
+            
+            // Si c'est une erreur 429 (rate limit), ne pas réessayer
+            if (response.status === 429) {
               lastError = new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
               break // Arrêter les tentatives
             }
@@ -759,13 +808,14 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
       }
     } else if (AI_API_PROVIDER === 'huggingface') {
       // Utiliser Hugging Face Inference API
+      const config = getOpenRouterConfig()
       response = await fetch(
         `https://api-inference.huggingface.co/models/meta-llama/Llama-3.1-8B-Instruct`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${AI_API_KEY}`,
+            'Authorization': `Bearer ${config.AI_API_KEY}`,
           },
           body: JSON.stringify({
             inputs: `${systemPrompt}\n\n${userPrompt}`,
@@ -1392,24 +1442,42 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       }
     } catch (aiError: any) {
       console.error('❌ Erreur lors de l\'analyse IA:', aiError)
+      const config = getOpenRouterConfig()
       console.error('❌ Détails de l\'erreur:', {
         message: aiError.message,
         stack: aiError.stack,
         name: aiError.name,
         response: aiError.response,
         status: aiError.status,
-        AI_API_KEY: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
-        AI_API_URL: AI_API_URL,
-        AI_MODEL: AI_MODEL,
-        AI_API_PROVIDER: AI_API_PROVIDER,
+        apiKeyLength: config.AI_API_KEY?.length || 0,
+        apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
+        url: config.AI_API_URL,
+        model: AI_MODEL,
+        provider: AI_API_PROVIDER,
       })
       
       // En cas d'erreur, retourner le message d'indisponibilité demandé
       // MAIS aussi inclure l'erreur dans les logs et dans la réponse pour débogage
-      const errorDetails = {
+      const errorDetails: any = {
         message: aiError.message || 'Erreur inconnue',
         name: aiError.name || 'Error',
         stack: aiError.stack?.substring(0, 500), // Limiter la taille
+      }
+      
+      // Détecter si c'est une erreur d'authentification OpenRouter
+      if (aiError.message && (aiError.message.includes('401') || aiError.message.includes('403'))) {
+        errorDetails.code = 'OPENROUTER_AUTH'
+        errorDetails.type = 'authentication'
+        
+        // Parser le message d'erreur pour extraire les détails
+        try {
+          const errorMatch = aiError.message.match(/\{.*\}/)
+          if (errorMatch) {
+            errorDetails.parsed = JSON.parse(errorMatch[0])
+          }
+        } catch {
+          // Ignorer si le parsing échoue
+        }
       }
       
       console.error('❌ ERREUR COMPLÈTE CAPTURÉE:', JSON.stringify(errorDetails, null, 2))
@@ -1468,11 +1536,21 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       message: aiMessage,
       analysis: aiAnalysis,
       suggestedQuestions: aiAnalysis.suggested_questions || [],
+      warnings: [] as string[],
     }
     
     // Toujours inclure les détails de l'erreur si disponible (pour débogage)
     if ((aiAnalysis as any).error_details) {
       responseData.error_details = (aiAnalysis as any).error_details
+      
+      // Si c'est une erreur d'authentification OpenRouter, ajouter un warning
+      const errorDetails = (aiAnalysis as any).error_details
+      if (errorDetails.message && (errorDetails.message.includes('401') || errorDetails.message.includes('403'))) {
+        responseData.warnings.push('OPENROUTER_AUTH')
+        responseData.code = 'OPENROUTER_AUTH'
+        responseData.detail = errorDetails.message
+      }
+      
       console.log('⚠️ Détails de l\'erreur inclus dans la réponse:', (aiAnalysis as any).error_details)
     }
     

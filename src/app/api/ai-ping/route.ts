@@ -1,0 +1,122 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { assertEnv, getEnvOrThrow } from '@/lib/server/assertEnv'
+
+/**
+ * Endpoint de test pour vérifier la connectivité OpenRouter
+ * GET /api/ai-ping
+ */
+export async function GET(request: NextRequest) {
+  try {
+    // Obtenir la configuration OpenRouter
+    const envCheck = assertEnv(['OPENROUTER_API_KEY'])
+    
+    if (!envCheck.allPresent && process.env.NODE_ENV === 'production') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'SERVER_MISCONFIG',
+          missing: envCheck.missing,
+        },
+        { status: 400 }
+      )
+    }
+    
+    const AI_API_KEY = getEnvOrThrow('OPENROUTER_API_KEY', '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')
+    const AI_API_BASE_URL = getEnvOrThrow('OPENROUTER_BASE_URL', process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1')
+    const OPENROUTER_SITE_URL = getEnvOrThrow('OPENROUTER_SITE_URL', process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com')
+    const OPENROUTER_REFERER = getEnvOrThrow('OPENROUTER_REFERER', OPENROUTER_SITE_URL)
+    const OPENROUTER_APP_TITLE = getEnvOrThrow('OPENROUTER_APP_TITLE', 'CarsLink Assistant')
+    
+    // Test de connectivité simple
+    let connectivityOk = false
+    let connectivityError: string | null = null
+    
+    try {
+      const testResponse = await fetch(`${AI_API_BASE_URL}/models`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${AI_API_KEY}`,
+        },
+        signal: AbortSignal.timeout(5000),
+      })
+      
+      connectivityOk = testResponse.ok
+      if (!testResponse.ok) {
+        const errorText = await testResponse.text()
+        connectivityError = `Status ${testResponse.status}: ${errorText}`
+      }
+    } catch (error: any) {
+      connectivityError = error.message
+    }
+    
+    // Test de chat simple
+    let chatOk = false
+    let chatError: string | null = null
+    let modelUsed: string | null = null
+    
+    if (connectivityOk) {
+      try {
+        const chatResponse = await fetch(`${AI_API_BASE_URL}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${AI_API_KEY}`,
+            'HTTP-Referer': OPENROUTER_REFERER,
+            'Referer': OPENROUTER_REFERER,
+            'X-Title': OPENROUTER_APP_TITLE,
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-flash-1.5:free',
+            messages: [
+              { role: 'user', content: 'Bonjour' },
+            ],
+            max_tokens: 10,
+          }),
+          signal: AbortSignal.timeout(10000),
+        })
+        
+        if (chatResponse.ok) {
+          const chatData = await chatResponse.json()
+          chatOk = true
+          modelUsed = chatData.model || 'google/gemini-flash-1.5:free'
+        } else {
+          const errorText = await chatResponse.text()
+          chatError = `Status ${chatResponse.status}: ${errorText}`
+        }
+      } catch (error: any) {
+        chatError = error.message
+      }
+    }
+    
+    return NextResponse.json({
+      ok: connectivityOk && chatOk,
+      connectivity: {
+        ok: connectivityOk,
+        error: connectivityError,
+      },
+      chat: {
+        ok: chatOk,
+        error: chatError,
+        modelUsed,
+      },
+      config: {
+        refererUsed: OPENROUTER_REFERER,
+        siteUrl: OPENROUTER_SITE_URL,
+        baseUrl: AI_API_BASE_URL,
+        apiKeyLength: AI_API_KEY.length,
+        apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+      },
+    })
+  } catch (error: any) {
+    console.error('❌ Erreur dans /api/ai-ping:', error)
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'INTERNAL_ERROR',
+        message: error.message,
+      },
+      { status: 500 }
+    )
+  }
+}
+
