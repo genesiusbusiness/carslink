@@ -370,7 +370,8 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           {
             temperature: 0.7,
             max_tokens: 1500,
-            timeout: 15000,
+            timeout: 30000, // 30s timeout
+            retries: 1, // 1 retry pour erreurs réseau/5xx uniquement
           }
         )
         

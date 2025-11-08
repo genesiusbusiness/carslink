@@ -18,11 +18,13 @@ import * as dotenv from 'dotenv'
 import * as path from 'path'
 
 // Charger les variables d'environnement depuis .env.local si disponible
-const envPath = path.join(process.cwd(), '.env.local')
-try {
-  dotenv.config({ path: envPath })
-} catch (e) {
-  // Ignorer si .env.local n'existe pas
+if (dotenv && path) {
+  const envPath = path.join(process.cwd(), '.env.local')
+  try {
+    dotenv.config({ path: envPath })
+  } catch (e) {
+    // Ignorer si .env.local n'existe pas
+  }
 }
 
 // Variables d'environnement requises
