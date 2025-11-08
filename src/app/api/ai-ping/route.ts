@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assertEnv, getEnvOrThrow } from '@/lib/server/assertEnv'
 
 /**
  * Endpoint de test pour vérifier la connectivité OpenRouter
@@ -7,25 +6,24 @@ import { assertEnv, getEnvOrThrow } from '@/lib/server/assertEnv'
  */
 export async function GET(request: NextRequest) {
   try {
-    // Obtenir la configuration OpenRouter
-    const envCheck = assertEnv(['OPENROUTER_API_KEY'])
+    // Obtenir la configuration OpenRouter avec fallbacks
+    const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
+    const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
+    const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
+    const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || OPENROUTER_SITE_URL
+    const OPENROUTER_APP_TITLE = process.env.OPENROUTER_APP_TITLE || 'CarsLink Assistant'
     
-    if (!envCheck.allPresent && process.env.NODE_ENV === 'production') {
+    // Vérifier que la clé API est présente
+    if (!AI_API_KEY) {
       return NextResponse.json(
         {
           ok: false,
           error: 'SERVER_MISCONFIG',
-          missing: envCheck.missing,
+          missing: ['OPENROUTER_API_KEY'],
         },
         { status: 400 }
       )
     }
-    
-    const AI_API_KEY = getEnvOrThrow('OPENROUTER_API_KEY', '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')
-    const AI_API_BASE_URL = getEnvOrThrow('OPENROUTER_BASE_URL', process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1')
-    const OPENROUTER_SITE_URL = getEnvOrThrow('OPENROUTER_SITE_URL', process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com')
-    const OPENROUTER_REFERER = getEnvOrThrow('OPENROUTER_REFERER', OPENROUTER_SITE_URL)
-    const OPENROUTER_APP_TITLE = getEnvOrThrow('OPENROUTER_APP_TITLE', 'CarsLink Assistant')
     
     // Test de connectivité simple
     let connectivityOk = false
