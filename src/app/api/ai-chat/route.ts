@@ -400,11 +400,11 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               body: JSON.stringify({
                 model: currentModel,
                 messages: [
-                  { role: 'system', content: systemPrompt.substring(0, 1000) }, // Limiter la taille du prompt
-                  { role: 'user', content: userPrompt.substring(0, 1000) }, // Limiter la taille du prompt
+                  { role: 'system', content: systemPrompt }, // Ne pas limiter - le prompt est nécessaire
+                  { role: 'user', content: userPrompt }, // Ne pas limiter - l'historique est nécessaire
                 ],
                 temperature: 0.7,
-                max_tokens: 1000, // Réduire encore plus pour éviter les timeouts
+                max_tokens: 1500, // Augmenter pour avoir une réponse complète
               }),
               signal: controller.signal, // Ajouter le signal pour le timeout
             })
