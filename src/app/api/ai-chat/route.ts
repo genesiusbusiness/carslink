@@ -422,8 +422,11 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           
           console.log(`📤 Envoi de la requête à OpenRouter avec le modèle ${currentModel}...`)
           console.log(`🔑 Clé API utilisée: ${config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 5)}` : 'NON DÉFINIE'} (longueur: ${config.AI_API_KEY?.length || 0})`)
+          console.log(`🔑 Clé API complète (pour débogage): ${config.AI_API_KEY}`)
+          console.log(`🔑 Clé API depuis env: ${process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'NON DÉFINIE'}`)
           console.log(`🔗 URL: ${config.AI_API_URL}`)
           console.log(`🔗 Referer: ${config.OPENROUTER_REFERER}`)
+          console.log(`🔗 Site URL: ${config.OPENROUTER_SITE_URL}`)
           const requestStartTime = Date.now()
           
           // Construire les headers - utiliser Referer si HTTP-Referer n'est pas supporté
@@ -437,6 +440,14 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           // Certaines infrastructures ne transmettent pas HTTP-Referer
           headers['HTTP-Referer'] = config.OPENROUTER_REFERER
           headers['Referer'] = config.OPENROUTER_REFERER
+          
+          console.log(`📋 Headers envoyés:`, {
+            'Content-Type': headers['Content-Type'],
+            'Authorization': `Bearer ${config.AI_API_KEY.substring(0, 20)}...`,
+            'X-Title': headers['X-Title'],
+            'HTTP-Referer': headers['HTTP-Referer'],
+            'Referer': headers['Referer'],
+          })
           
           try {
             response = await fetch(config.AI_API_URL, {
@@ -493,11 +504,18 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               apiKeyLength: config.AI_API_KEY?.length || 0,
               apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...` : 'N/A',
               apiKeySuffix: config.AI_API_KEY ? `...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 10)}` : 'N/A',
+              apiKeyFull: config.AI_API_KEY, // Log complet pour débogage
               apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+              apiKeyFromEnvValue: process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'N/A',
               url: config.AI_API_URL,
               referer: config.OPENROUTER_REFERER,
               siteUrl: config.OPENROUTER_SITE_URL,
-              // Ne pas logger la clé complète pour la sécurité
+              headers: {
+                'Authorization': `Bearer ${config.AI_API_KEY.substring(0, 20)}...`,
+                'HTTP-Referer': config.OPENROUTER_REFERER,
+                'Referer': config.OPENROUTER_REFERER,
+                'X-Title': config.OPENROUTER_APP_TITLE,
+              },
             })
             
             // Gérer les erreurs d'authentification (401, 403) de manière spécifique
