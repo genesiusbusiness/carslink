@@ -69,6 +69,9 @@ export async function callOpenRouter(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
+    // Log pour débogage (sans exposer la clé complète)
+    console.log(`📤 Appel OpenRouter - Modèle: ${model}, Clé API: ${OPENROUTER_KEY ? `${OPENROUTER_KEY.substring(0, 20)}...${OPENROUTER_KEY.substring(OPENROUTER_KEY.length - 5)}` : 'MANQUANTE'} (longueur: ${OPENROUTER_KEY?.length || 0})`)
+    
     const res = await fetch(`${OPENROUTER_URL}/chat/completions`, {
       method: "POST",
       headers: OPENROUTER_HEADERS,
@@ -89,6 +92,19 @@ export async function callOpenRouter(
       json = JSON.parse(text);
     } catch {
       // Garder le texte pour le débogage
+    }
+    
+    // Log détaillé pour les erreurs 401
+    if (res.status === 401 || res.status === 403) {
+      console.error(`❌ Erreur d'authentification OpenRouter (${res.status}):`, {
+        model,
+        status: res.status,
+        statusText: res.statusText,
+        responseText: text.substring(0, 500),
+        apiKeyLength: OPENROUTER_KEY?.length || 0,
+        apiKeyPrefix: OPENROUTER_KEY ? `${OPENROUTER_KEY.substring(0, 20)}...` : 'MANQUANTE',
+        apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+      })
     }
 
     return {

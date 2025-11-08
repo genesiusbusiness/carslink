@@ -381,8 +381,20 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
             text: result.text || 'Unknown error' 
           })
           
-          // 401/402/429/500/503 → on tente le modèle suivant
-          if (![401, 402, 429, 500, 503, 408].includes(result.status)) {
+          // 401/403 → problème d'authentification, arrêter immédiatement (tous les modèles échoueront)
+          if (result.status === 401 || result.status === 403) {
+            console.error(`❌ Erreur d'authentification (${result.status}) avec ${model}. La clé API OpenRouter est invalide ou manquante. Arrêt des tentatives.`)
+            break // Arrêter immédiatement, tous les modèles échoueront de la même manière
+          }
+          
+          // 402 → erreur de paiement, arrêter aussi
+          if (result.status === 402) {
+            console.error(`❌ Erreur de paiement (402) avec ${model}. Arrêt des tentatives.`)
+            break
+          }
+          
+          // 429/500/503/408 → on tente le modèle suivant
+          if (![429, 500, 503, 408].includes(result.status)) {
             console.warn(`⚠️ Erreur non récupérable (${result.status}) avec ${model}, arrêt des tentatives`)
             break
           }
