@@ -102,7 +102,13 @@ export async function GET(request: NextRequest) {
         siteUrl: OPENROUTER_SITE_URL,
         baseUrl: AI_API_BASE_URL,
         apiKeyLength: AI_API_KEY.length,
+        apiKeyPrefix: AI_API_KEY.substring(0, 20),
+        apiKeySuffix: AI_API_KEY.substring(AI_API_KEY.length - 10),
         apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+        apiKeyFromEnvLength: process.env.OPENROUTER_API_KEY?.length || 0,
+        apiKeyFromEnvPrefix: process.env.OPENROUTER_API_KEY ? process.env.OPENROUTER_API_KEY.substring(0, 20) : 'N/A',
+        apiKeyFromEnvSuffix: process.env.OPENROUTER_API_KEY ? process.env.OPENROUTER_API_KEY.substring(process.env.OPENROUTER_API_KEY.length - 10) : 'N/A',
+        apiKeyFull: AI_API_KEY, // Log complet pour débogage
       },
     })
   } catch (error: any) {
