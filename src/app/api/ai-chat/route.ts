@@ -10,7 +10,13 @@ const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 // Utiliser un modèle gratuit et disponible
 // Essayer plusieurs modèles gratuits selon disponibilité
 // Modèles gratuits disponibles sur OpenRouter : meta-llama/llama-3.2-3b-instruct:free, google/gemini-flash-1.5:free, mistralai/mistral-7b-instruct:free
-const AI_MODEL = 'meta-llama/llama-3.2-3b-instruct:free' // Modèle gratuit et fiable
+// Liste de modèles à essayer en cas d'échec (du plus fiable au moins fiable)
+const AI_MODELS = [
+  'google/gemini-flash-1.5:free', // Le plus fiable
+  'meta-llama/llama-3.2-3b-instruct:free',
+  'mistralai/mistral-7b-instruct:free',
+]
+const AI_MODEL = AI_MODELS[0] // Modèle par défaut
 
 // Supabase Admin pour les opérations serveur
 // Créer le client Supabase Admin de manière sécurisée
@@ -345,67 +351,89 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
     let responseData: any
 
     if (AI_API_PROVIDER === 'openrouter') {
-      // Utiliser OpenRouter avec le modèle configuré
-      console.log('🔍 Appel OpenRouter API:', {
-        url: AI_API_URL,
-        model: AI_MODEL,
-        apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
-      })
+      // Essayer plusieurs modèles en cas d'échec
+      let lastError: Error | null = null
+      let success = false
       
-      // Créer un AbortController pour gérer le timeout
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 secondes de timeout
-      
-      try {
-        response = await fetch(AI_API_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${AI_API_KEY}`,
-            'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
-            'X-Title': 'CarsLink AI Assistant',
-          },
-          body: JSON.stringify({
-            model: AI_MODEL,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            temperature: 0.7,
-            max_tokens: 2000, // Augmenter pour avoir plus de tokens
-          }),
-          signal: controller.signal, // Ajouter le signal pour le timeout
-        })
+      for (let modelIndex = 0; modelIndex < AI_MODELS.length && !success; modelIndex++) {
+        const currentModel = AI_MODELS[modelIndex]
+        console.log(`🔍 Tentative ${modelIndex + 1}/${AI_MODELS.length} avec le modèle: ${currentModel}`)
         
-        clearTimeout(timeoutId) // Annuler le timeout si la requête réussit
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId)
-        if (fetchError.name === 'AbortError') {
-          console.error('❌ Timeout lors de l\'appel OpenRouter API (30 secondes)')
-          throw new Error('OpenRouter API timeout: La requête a pris plus de 30 secondes')
+        try {
+          // Créer un AbortController pour gérer le timeout
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 secondes de timeout
+          
+          try {
+            response = await fetch(AI_API_URL, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${AI_API_KEY}`,
+                'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
+                'X-Title': 'CarsLink AI Assistant',
+              },
+              body: JSON.stringify({
+                model: currentModel,
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt },
+                ],
+                temperature: 0.7,
+                max_tokens: 2000, // Augmenter pour avoir plus de tokens
+              }),
+              signal: controller.signal, // Ajouter le signal pour le timeout
+            })
+            
+            clearTimeout(timeoutId) // Annuler le timeout si la requête réussit
+          } catch (fetchError: any) {
+            clearTimeout(timeoutId)
+            if (fetchError.name === 'AbortError') {
+              console.error(`❌ Timeout avec le modèle ${currentModel} (30 secondes)`)
+              lastError = new Error(`OpenRouter API timeout: La requête a pris plus de 30 secondes`)
+              continue // Essayer le modèle suivant
+            }
+            console.error(`❌ Erreur réseau avec le modèle ${currentModel}:`, fetchError)
+            lastError = new Error(`OpenRouter API network error: ${fetchError.message}`)
+            continue // Essayer le modèle suivant
+          }
+          
+          console.log(`✅ Réponse OpenRouter reçue pour ${currentModel}:`, {
+            status: response.status,
+            statusText: response.statusText,
+            ok: response.ok,
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error(`❌ Erreur OpenRouter API avec ${currentModel}:`, response.status, errorText)
+            
+            // Si c'est une erreur 429 (rate limit) ou 401 (unauthorized), ne pas réessayer
+            if (response.status === 429 || response.status === 401) {
+              lastError = new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
+              break // Arrêter les tentatives
+            }
+            
+            // Pour les autres erreurs, essayer le modèle suivant
+            lastError = new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
+            continue
+          }
+          
+          // Si on arrive ici, la requête a réussi
+          success = true
+          console.log(`✅ Modèle ${currentModel} a fonctionné !`)
+          
+        } catch (modelError: any) {
+          console.error(`❌ Erreur avec le modèle ${currentModel}:`, modelError)
+          lastError = modelError
+          continue // Essayer le modèle suivant
         }
-        console.error('❌ Erreur réseau lors de l\'appel OpenRouter API:', fetchError)
-        throw new Error(`OpenRouter API network error: ${fetchError.message}`)
       }
       
-      console.log('✅ Réponse OpenRouter reçue:', {
-        status: response.status,
-        statusText: response.statusText,
-        ok: response.ok,
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ Erreur OpenRouter API:', response.status, errorText)
-        console.error('❌ Détails de la requête:', {
-          url: AI_API_URL,
-          model: AI_MODEL,
-          apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText,
-        })
-        throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
+      // Si aucun modèle n'a fonctionné, lancer l'erreur
+      if (!success || !response) {
+        console.error('❌ Tous les modèles ont échoué. Dernière erreur:', lastError)
+        throw lastError || new Error('Tous les modèles OpenRouter ont échoué')
       }
 
       responseData = await response.json()
