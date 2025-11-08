@@ -14,17 +14,8 @@
  * - Un appel test à l'API OpenRouter
  */
 
-// Charger les variables d'environnement depuis .env.local si disponible
-// Note: dotenv est optionnel, les variables d'environnement peuvent être chargées autrement
-try {
-  const dotenv = require('dotenv')
-  const path = require('path')
-  const envPath = path.join(process.cwd(), '.env.local')
-  dotenv.config({ path: envPath })
-} catch (e) {
-  // Ignorer si dotenv n'est pas installé ou si .env.local n'existe pas
-  // Les variables d'environnement peuvent être chargées depuis le système
-}
+// Note: Les variables d'environnement sont chargées automatiquement par Next.js/AWS Amplify
+// Pas besoin de dotenv pour ce script
 
 // Variables d'environnement requises
 const BASE = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'

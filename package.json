@@ -12,7 +12,7 @@
     "cap:android": "npx cap open android",
     "cap:sync": "npx cap sync",
     "cap:copy": "npx cap copy",
-    "health:openrouter": "npx ts-node scripts/openrouter-health.ts"
+    "health:openrouter": "node --loader ts-node/esm scripts/openrouter-health.ts || node -r ts-node/register scripts/openrouter-health.ts || npx tsx scripts/openrouter-health.ts"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.2",
