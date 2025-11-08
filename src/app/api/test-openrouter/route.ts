@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // Utiliser les variables d'environnement AWS Amplify, avec fallback pour le développement local
 // Supporte aussi OPENROUTER_BASE_UR (sans L) pour compatibilité avec AWS configuré
-const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
+const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
 const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
 const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
 const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
