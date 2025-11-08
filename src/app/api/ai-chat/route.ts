@@ -453,6 +453,17 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           if (!response.ok) {
             const errorText = await response.text()
             console.error(`❌ Erreur OpenRouter API avec ${currentModel}:`, response.status, errorText)
+            console.error(`❌ Détails de l'erreur:`, {
+              status: response.status,
+              statusText: response.statusText,
+              errorText: errorText,
+              apiKeyLength: AI_API_KEY?.length || 0,
+              apiKeyPrefix: AI_API_KEY ? `${AI_API_KEY.substring(0, 20)}...` : 'N/A',
+              apiKeySuffix: AI_API_KEY ? `...${AI_API_KEY.substring(AI_API_KEY.length - 10)}` : 'N/A',
+              apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+              url: AI_API_URL,
+              referer: OPENROUTER_REFERER,
+            })
             
             // Si c'est une erreur 429 (rate limit) ou 401 (unauthorized), ne pas réessayer
             if (response.status === 429 || response.status === 401) {

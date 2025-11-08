@@ -110,7 +110,14 @@ export async function GET(request: NextRequest) {
       environment: {
         nodeEnv: process.env.NODE_ENV,
         hasApiKey: !!AI_API_KEY,
-        apiKeyPrefix: AI_API_KEY ? AI_API_KEY.substring(0, 10) : 'N/A',
+        apiKeyLength: AI_API_KEY ? AI_API_KEY.length : 0,
+        apiKeyPrefix: AI_API_KEY ? AI_API_KEY.substring(0, 20) : 'N/A',
+        apiKeySuffix: AI_API_KEY ? AI_API_KEY.substring(AI_API_KEY.length - 10) : 'N/A',
+        apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+        apiKeyFromEnvLength: process.env.OPENROUTER_API_KEY ? process.env.OPENROUTER_API_KEY.length : 0,
+        baseUrlFromEnv: !!process.env.OPENROUTER_BASE_URL || !!process.env.OPENROUTER_BASE_UR,
+        baseUrl: AI_API_BASE_URL,
+        referer: OPENROUTER_REFERER,
       },
     })
   } catch (error: any) {
