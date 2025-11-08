@@ -51,15 +51,27 @@ export function ensureServerEnv() {
     throw new Error("Missing OPENROUTER_API_KEY");
   }
   
+  // Vérifier si la clé vient des variables d'environnement ou du fallback
+  const apiKeyFromEnv = !!(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY);
+  const apiKeySource = apiKeyFromEnv ? 'ENV' : 'FALLBACK';
+  
   // Log pour débogage (sans exposer la clé complète)
   console.log('🔑 Configuration OpenRouter:', {
     apiKeyLength: OPENROUTER_KEY.length,
     apiKeyPrefix: `${OPENROUTER_KEY.substring(0, 20)}...`,
     apiKeySuffix: `...${OPENROUTER_KEY.substring(OPENROUTER_KEY.length - 5)}`,
-    apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+    apiKeyFromEnv: apiKeyFromEnv,
+    apiKeySource: apiKeySource,
+    envVarExists: !!process.env.OPENROUTER_API_KEY,
+    envVarLength: process.env.OPENROUTER_API_KEY?.length || 0,
     baseUrl: OPENROUTER_URL,
     referer: process.env.OPENROUTER_REFERER || process.env.OPENROUTER_SITE_URL || '',
   });
+  
+  // Avertir si on utilise le fallback en production
+  if (!apiKeyFromEnv && process.env.NODE_ENV === 'production') {
+    console.warn('⚠️ ATTENTION: Utilisation de la clé API fallback en production. Configurez OPENROUTER_API_KEY dans AWS Amplify.');
+  }
 }
 
 /**
