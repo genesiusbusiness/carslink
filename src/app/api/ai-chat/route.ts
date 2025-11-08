@@ -1261,6 +1261,22 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Vérifier la configuration OpenRouter avant d'appeler l'IA
+    try {
+      getOpenRouterConfig()
+    } catch (configError: any) {
+      console.error('❌ Erreur de configuration OpenRouter:', configError)
+      return NextResponse.json(
+        {
+          error: 'Server configuration error',
+          details: configError.message || 'OpenRouter configuration is invalid',
+          code: 'SERVER_MISCONFIG',
+          missing: configError.message?.includes('missing') ? ['OPENROUTER_API_KEY'] : [],
+        },
+        { status: 500 }
+      )
+    }
+
     try {
       aiAnalysis = await analyzeProblemWithAI(message, conversationHistory, normalizedVehicles, profile || null)
       
