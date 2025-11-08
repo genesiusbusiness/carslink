@@ -361,8 +361,9 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
         
         try {
           // Créer un AbortController pour gérer le timeout
+          // Réduire le timeout à 20 secondes pour AWS Amplify (qui a souvent un timeout plus court)
           const controller = new AbortController()
-          const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 secondes de timeout
+          const timeoutId = setTimeout(() => controller.abort(), 20000) // 20 secondes de timeout
           
           try {
             response = await fetch(AI_API_URL, {
@@ -370,8 +371,9 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${AI_API_KEY}`,
-                'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
-                'X-Title': 'CarsLink AI Assistant',
+                // Retirer HTTP-Referer et X-Title qui pourraient causer des problèmes sur AWS
+                // 'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
+                // 'X-Title': 'CarsLink AI Assistant',
               },
               body: JSON.stringify({
                 model: currentModel,
@@ -380,7 +382,7 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
                   { role: 'user', content: userPrompt },
                 ],
                 temperature: 0.7,
-                max_tokens: 2000, // Augmenter pour avoir plus de tokens
+                max_tokens: 1500, // Réduire pour éviter les timeouts
               }),
               signal: controller.signal, // Ajouter le signal pour le timeout
             })
@@ -1350,20 +1352,24 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       // En cas d'erreur, retourner le message d'indisponibilité demandé
       // MAIS aussi inclure l'erreur dans les logs et dans la réponse pour débogage
       const errorDetails = {
-        message: aiError.message,
-        name: aiError.name,
+        message: aiError.message || 'Erreur inconnue',
+        name: aiError.name || 'Error',
         stack: aiError.stack?.substring(0, 500), // Limiter la taille
       }
       
       console.error('❌ ERREUR COMPLÈTE CAPTURÉE:', JSON.stringify(errorDetails, null, 2))
+      console.error('❌ Erreur brute:', aiError)
+      console.error('❌ Type d\'erreur:', typeof aiError)
+      console.error('❌ Clés de l\'erreur:', Object.keys(aiError))
       
+      // Toujours inclure les détails de l'erreur pour débogage (même en production)
       aiAnalysis = {
         causes: ['Service temporairement indisponible'],
         urgency: 'moderate',
         recommended_service: 'Diagnostic électronique',
         service_id: 'diagnostic',
-        // Ajouter les détails de l'erreur pour débogage (en développement uniquement)
-        ...(process.env.NODE_ENV === 'development' ? { error_details: errorDetails } : {}),
+        // Toujours inclure les détails de l'erreur pour débogage
+        error_details: errorDetails,
       } as AIAnalysis
       aiResponse = '🚧 Le service CarsLink Assistant est temporairement indisponible. Réessayez plus tard.'
     }
