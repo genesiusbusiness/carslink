@@ -86,6 +86,9 @@ async function analyzeProblemWithAI(
     model: AI_MODEL,
     url: AI_API_URL,
     apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 15)}...` : 'NON DÉFINIE',
+    apiKeyLength: AI_API_KEY ? AI_API_KEY.length : 0,
+    apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+    apiKeyFull: AI_API_KEY, // Log complet pour débogage (à retirer en production)
     userMessage: userMessage.substring(0, 50),
   })
 
@@ -391,6 +394,9 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 secondes de timeout
           
           console.log(`📤 Envoi de la requête à OpenRouter avec le modèle ${currentModel}...`)
+          console.log(`🔑 Clé API utilisée: ${AI_API_KEY ? `${AI_API_KEY.substring(0, 20)}...${AI_API_KEY.substring(AI_API_KEY.length - 5)}` : 'NON DÉFINIE'} (longueur: ${AI_API_KEY?.length || 0})`)
+          console.log(`🔗 URL: ${AI_API_URL}`)
+          console.log(`🔗 Referer: ${OPENROUTER_REFERER}`)
           const requestStartTime = Date.now()
           
           try {
