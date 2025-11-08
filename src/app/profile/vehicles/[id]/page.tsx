@@ -216,8 +216,38 @@ export default function EditVehiclePage() {
 
   const handleDelete = async () => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce véhicule ?")) return
+    if (!user) return
 
     try {
+      // Vérifier que le véhicule appartient bien à l'utilisateur avant de supprimer
+      // Récupérer d'abord le fly_accounts.id
+      const { data: flyAccount, error: flyAccountError } = await supabase
+        .from("fly_accounts")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+
+      if (flyAccountError || !flyAccount?.id) {
+        throw new Error("Impossible de vérifier la propriété du véhicule")
+      }
+
+      // Vérifier que le véhicule appartient à l'utilisateur
+      const { data: vehicleCheck, error: checkError } = await supabase
+        .from("vehicles")
+        .select("flynesis_user_id")
+        .eq("id", vehicleId)
+        .maybeSingle()
+
+      if (checkError || !vehicleCheck) {
+        throw new Error("Véhicule introuvable")
+      }
+
+      // Vérifier que le véhicule appartient bien à l'utilisateur (flyAccount.id ou user.id pour compatibilité)
+      if (vehicleCheck.flynesis_user_id !== flyAccount.id && vehicleCheck.flynesis_user_id !== user.id) {
+        throw new Error("Vous n'avez pas la permission de supprimer ce véhicule")
+      }
+
+      // Supprimer le véhicule
       const { error } = await supabase
         .from("vehicles")
         .delete()
@@ -233,6 +263,7 @@ export default function EditVehiclePage() {
 
       router.push("/profile")
     } catch (error: any) {
+      console.error("Erreur lors de la suppression du véhicule:", error)
       toast({
         title: "Erreur",
         description: error.message || "Erreur lors de la suppression",

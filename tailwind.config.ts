@@ -20,7 +20,10 @@ const config = {
         xl: "2rem",
       },
       screens: {
-        sm: "640px",
+        xs: "320px",
+        "xs-sm": "360px",
+        sm: "375px",
+        "sm-md": "640px",
         md: "768px",
         lg: "1024px",
         xl: "1280px",

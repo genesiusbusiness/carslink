@@ -41,6 +41,7 @@ interface VehicleDocument {
   file_type: string
   file_size?: number | null
   created_at: string
+  flynesis_user_id?: string | null
 }
 
 interface VehicleWithDocuments extends Vehicle {
@@ -153,13 +154,20 @@ export default function MaintenancePage() {
       }
 
       if (vehiclesData) {
-        // Trier les documents par date décroissante pour chaque véhicule
-        const vehiclesWithSortedDocs = vehiclesData.map(vehicle => ({
-          ...vehicle,
-          documents: (vehicle.documents || []).sort((a: VehicleDocument, b: VehicleDocument) => 
+        // Filtrer et trier les documents par date décroissante pour chaque véhicule
+        // Filtrer les documents qui appartiennent à l'utilisateur (flyAccount.id ou user.id)
+        const vehiclesWithSortedDocs = vehiclesData.map(vehicle => {
+          const userFlyId = flyAccount?.id || user.id
+          const filteredDocuments = (vehicle.documents || []).filter((doc: VehicleDocument) => 
+            doc.flynesis_user_id === userFlyId || doc.flynesis_user_id === user.id
+          ).sort((a: VehicleDocument, b: VehicleDocument) => 
             new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
           )
-        }))
+          return {
+            ...vehicle,
+            documents: filteredDocuments
+          }
+        })
         setVehicles(vehiclesWithSortedDocs as VehicleWithDocuments[])
       }
     } catch (error: any) {
@@ -202,13 +210,17 @@ export default function MaintenancePage() {
   }
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, vehicleId: string) => {
-    if (!user || !event.target.files || event.target.files.length === 0) return
+    if (!user || !event.target.files || event.target.files.length === 0) {
+      // Réinitialiser l'input si aucun fichier n'est sélectionné
+      event.target.value = ''
+      return
+    }
 
     const file = event.target.files[0]
     
     // Valider le format du fichier
     if (!validateFile(file)) {
-      event.target.value = '' // Réinitialiser l'input seulement en cas d'erreur
+      event.target.value = '' // Réinitialiser l'input en cas d'erreur
       return
     }
 
@@ -253,9 +265,6 @@ export default function MaintenancePage() {
 
       if (insertError) throw insertError
 
-      // Réinitialiser l'input AVANT d'ouvrir le dialog
-      event.target.value = ''
-
       // Ouvrir automatiquement le dialog de renommage après l'upload réussi
       if (insertedDocument) {
         setDocumentToRename(insertedDocument as VehicleDocument)
@@ -270,8 +279,6 @@ export default function MaintenancePage() {
       })
       // Recharger les données après la fermeture du dialog (dans handleRenameDocument)
     } catch (error: any) {
-      event.target.value = '' // Réinitialiser l'input en cas d'erreur
-      
       // Message d'erreur spécifique pour le bucket manquant
       if (error.message && error.message.includes("Bucket not found")) {
         showElegantToast({
@@ -288,6 +295,8 @@ export default function MaintenancePage() {
       }
     } finally {
       setUploading(false)
+      // Réinitialiser l'input après le traitement pour permettre de sélectionner le même fichier à nouveau
+      event.target.value = ''
     }
   }
 
@@ -475,30 +484,30 @@ export default function MaintenancePage() {
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
                     {/* Zone d'upload de documents */}
-                    <div
-                      className="relative flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group mb-6"
-                      onClick={() => document.getElementById(`file-upload-${vehicle.id}`)?.click()}
-                    >
-                      <UploadCloud className="h-10 w-10 text-gray-400 group-hover:text-blue-600 mb-3" />
-                      <p className="text-sm font-medium text-gray-700 mb-1">Déposez vos documents ici</p>
-                      <p className="text-xs text-gray-500">ou cliquez pour sélectionner</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Formats acceptés : PDF, DOC, DOCX, TXT, RTF, XLS, XLSX, CSV, ODT, ODS, ODP
-                      </p>
+                    <div className="relative mb-6">
+                      <label
+                        htmlFor={`file-upload-${vehicle.id}`}
+                        className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-xl text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-all group"
+                      >
+                        <UploadCloud className="h-10 w-10 text-gray-400 group-hover:text-blue-600 mb-3" />
+                        <p className="text-sm font-medium text-gray-700 mb-1">Déposez vos documents ici</p>
+                        <p className="text-xs text-gray-500">ou cliquez pour sélectionner</p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Formats acceptés : PDF, DOC, DOCX, TXT, RTF, XLS, XLSX, CSV, ODT, ODS, ODP
+                        </p>
+                      </label>
                       <input
                         id={`file-upload-${vehicle.id}`}
                         type="file"
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                        onChange={(e) => handleFileUpload(e, vehicle.id)}
+                        className="hidden"
+                        onChange={(e) => {
+                          handleFileUpload(e, vehicle.id)
+                          // Réinitialiser l'input après le traitement pour permettre de sélectionner le même fichier à nouveau
+                          e.target.value = ''
+                        }}
                         disabled={uploading}
                         accept={ACCEPTED_DOCUMENT_FORMATS.join(',')}
-                        onClick={(e) => {
-                          // Réinitialiser l'input si on clique dessus pendant qu'il est vide
-                          // Cela évite les problèmes de double-clic
-                          if (!uploading && e.currentTarget.value === '') {
-                            // Ne rien faire, laisser le navigateur ouvrir le sélecteur de fichiers
-                          }
-                        }}
+                        multiple={false}
                       />
                     </div>
 

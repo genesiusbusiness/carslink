@@ -136,9 +136,38 @@ export default function ProfilePage() {
   }
 
   const handleDeleteVehicle = async () => {
-    if (!vehicleToDelete) return
+    if (!vehicleToDelete || !user) return
 
     try {
+      // Vérifier que le véhicule appartient bien à l'utilisateur avant de supprimer
+      // Récupérer d'abord le fly_accounts.id
+      const { data: flyAccount, error: flyAccountError } = await supabase
+        .from("fly_accounts")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+
+      if (flyAccountError || !flyAccount?.id) {
+        throw new Error("Impossible de vérifier la propriété du véhicule")
+      }
+
+      // Vérifier que le véhicule appartient à l'utilisateur
+      const { data: vehicleCheck, error: checkError } = await supabase
+        .from("vehicles")
+        .select("flynesis_user_id")
+        .eq("id", vehicleToDelete.id)
+        .maybeSingle()
+
+      if (checkError || !vehicleCheck) {
+        throw new Error("Véhicule introuvable")
+      }
+
+      // Vérifier que le véhicule appartient bien à l'utilisateur (flyAccount.id ou user.id pour compatibilité)
+      if (vehicleCheck.flynesis_user_id !== flyAccount.id && vehicleCheck.flynesis_user_id !== user.id) {
+        throw new Error("Vous n'avez pas la permission de supprimer ce véhicule")
+      }
+
+      // Supprimer le véhicule
       const { error } = await supabase
         .from("vehicles")
         .delete()
@@ -156,6 +185,7 @@ export default function ProfilePage() {
       setVehicleToDelete(null)
       loadData()
     } catch (error: any) {
+      console.error("Erreur lors de la suppression du véhicule:", error)
       showElegantToast({
         title: "Erreur",
         message: error.message || "Erreur lors de la suppression",
@@ -195,15 +225,15 @@ export default function ProfilePage() {
           <div className="relative mb-6 sm:mb-8">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/10 to-blue-500/20 rounded-2xl blur-xl opacity-50" />
             <div className="relative bg-white/60 backdrop-blur-xl border border-white/40 rounded-2xl p-5 sm:p-6 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0">
+              <div className="flex items-center gap-4 perfect-start">
+                <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center shadow-lg flex-shrink-0 perfect-center">
                   <User className="h-7 w-7 sm:h-8 sm:w-8 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h2 className="text-lg sm:text-xl font-light text-gray-900 truncate">{displayName}</h2>
-                  <p className="text-xs sm:text-sm text-gray-500 font-light truncate">{user?.email || ""}</p>
+                  <p className="text-xs sm:text-sm text-gray-500 font-light truncate mt-1">{user?.email || ""}</p>
                   {profile?.phone && (
-                    <p className="text-xs sm:text-sm text-gray-500 font-light">{profile.phone}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 font-light truncate mt-1">{profile.phone}</p>
                   )}
                 </div>
               </div>
@@ -213,8 +243,8 @@ export default function ProfilePage() {
         {/* Vehicles - Responsive */}
         <Card className="mb-6 sm:mb-8">
           <CardHeader className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-              <div className="flex-1">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 perfect-between">
+              <div className="flex-1 min-w-0">
                 <CardTitle className="text-lg sm:text-xl">Mes véhicules</CardTitle>
                 <CardDescription className="text-xs sm:text-sm mt-1">
                   Gérez vos véhicules enregistrés
@@ -224,7 +254,7 @@ export default function ProfilePage() {
                 <Button
                   size="sm"
                   type="button"
-                  className="bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-xl h-9 sm:h-10 text-xs sm:text-sm w-full sm:w-auto font-medium"
+                  className="bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-xl h-10 text-xs sm:text-sm w-full sm:w-auto font-medium perfect-center"
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()

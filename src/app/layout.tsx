@@ -18,11 +18,13 @@ export default function RootLayout({
   return (
     <html lang="fr" className="h-full">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=5, user-scalable=yes, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, minimum-scale=1.0, user-scalable=yes, viewport-fit=cover" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="CarsLink" />
         <meta name="theme-color" content="#ffffff" />
+        <meta name="format-detection" content="telephone=no" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

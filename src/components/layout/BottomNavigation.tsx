@@ -25,7 +25,7 @@ export function BottomNavigation() {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 shadow-lg z-50 safe-area-bottom">
-      <div className="flex items-center justify-around max-w-[428px] mx-auto">
+      <div className="flex items-center justify-around max-w-[428px] mx-auto perfect-between">
         {navItems.map((item, index) => {
           const Icon = item.icon
           const active = isActive(item.path)
@@ -34,13 +34,13 @@ export function BottomNavigation() {
             <motion.button
               key={item.path}
               onClick={() => router.push(item.path)}
-              className="relative flex items-center justify-center"
+              className="relative flex items-center justify-center perfect-center"
               whileTap={{ scale: 0.9 }}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
             >
-              <div className="relative p-2.5 sm:p-3 rounded-full transition-all duration-200">
+              <div className="relative p-2.5 sm:p-3 rounded-full transition-all duration-200 perfect-center">
                 {active && (
                   <motion.div
                     layoutId="activeTab"

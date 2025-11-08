@@ -113,14 +113,22 @@ function ReservationPageContent() {
   const [otherServiceFiles, setOtherServiceFiles] = useState<File[]>([])
 
   // Mapping des noms de services de l'URL vers les IDs de service
+  // IMPORTANT: Les IDs doivent correspondre à ceux générés par ServiceSelector:
+  // service.name.toLowerCase().replace(/\s+/g, '_')
   const serviceNameToId: Record<string, { id: string; label: string }> = {
-    "révision": { id: "revision", label: "Révision constructeur complète" },
-    "revision": { id: "revision", label: "Révision constructeur complète" },
-    "vidange": { id: "vidange", label: "Vidange & entretien" },
-    "freinage": { id: "freinage", label: "Freinage (plaquettes, disques, liquide)" },
-    "freins": { id: "freinage", label: "Freinage (plaquettes, disques, liquide)" },
-    "pneu": { id: "changement_pneus", label: "Changement de pneus" },
-    "pneus": { id: "changement_pneus", label: "Changement de pneus" },
+    "révision": { id: "révision_constructeur_complète", label: "Révision constructeur complète" },
+    "revision": { id: "révision_constructeur_complète", label: "Révision constructeur complète" },
+    "vidange": { id: "vidange_&_entretien", label: "Vidange & entretien" },
+    "freinage": { id: "freinage_(plaquettes,_disques,_liquide)", label: "Freinage (plaquettes, disques, liquide)" },
+    "freins": { id: "freinage_(plaquettes,_disques,_liquide)", label: "Freinage (plaquettes, disques, liquide)" },
+    "pneu": { id: "changement_de_pneus", label: "Changement de pneus" },
+    "pneus": { id: "changement_de_pneus", label: "Changement de pneus" },
+    "diagnostic": { id: "diagnostic_électronique", label: "Diagnostic électronique" },
+    "diagnostic électronique": { id: "diagnostic_électronique", label: "Diagnostic électronique" },
+    "controle": { id: "contrôle_technique", label: "Contrôle technique" },
+    "contrôle": { id: "contrôle_technique", label: "Contrôle technique" },
+    "contrôle freinage": { id: "contrôle_technique", label: "Contrôle technique" },
+    "controle freinage": { id: "contrôle_technique", label: "Contrôle technique" },
   }
 
   useEffect(() => {
@@ -171,14 +179,40 @@ function ReservationPageContent() {
       console.error("Erreur lors du chargement:", error)
       })
     } else if (serviceParam) {
-      // Si on a seulement un service (sans garage), sélectionner le service et passer à l'étape 2 pour voir les garages avec filtres
+      // Si on a seulement un service (sans garage), sélectionner le service et rester à l'étape 1
       const serviceLower = serviceParam.toLowerCase().trim()
+      
+      // Convertir le paramètre en ID de service (même logique que ServiceSelector)
+      // ServiceSelector crée les IDs avec: service.name.toLowerCase().replace(/\s+/g, '_')
+      const serviceIdFromParam = serviceLower.replace(/\s+/g, '_')
+      
+      // Essayer d'abord avec le mapping
       const serviceMapping = serviceNameToId[serviceLower]
       if (serviceMapping) {
         setSelectedService(serviceMapping.id)
         setSelectedServiceLabel(serviceMapping.label)
-        // Passer directement à l'étape 2 pour voir les garages avec filtres
-        setCurrentStep(2)
+        setCurrentStep(1)
+      } else {
+        // Si pas de mapping exact, essayer de trouver par correspondance partielle
+        let found = false
+        for (const [key, value] of Object.entries(serviceNameToId)) {
+          if (serviceLower.includes(key) || key.includes(serviceLower)) {
+            setSelectedService(value.id)
+            setSelectedServiceLabel(value.label)
+            setCurrentStep(1)
+            found = true
+            break
+          }
+        }
+        
+        // Si toujours pas trouvé, utiliser directement l'ID converti du paramètre
+        // (car ServiceSelector crée les IDs de cette façon)
+        if (!found) {
+          setSelectedService(serviceIdFromParam)
+          // Le label sera mis à jour quand les services seront chargés
+          setSelectedServiceLabel(serviceParam)
+          setCurrentStep(1)
+        }
       }
     }
     
@@ -196,6 +230,61 @@ function ReservationPageContent() {
       loadGaragesForService()
     }
   }, [selectedService, selectedServiceLabel, currentStep])
+
+  // Sélectionner automatiquement le service depuis l'URL une fois que les services sont disponibles
+  useEffect(() => {
+    const serviceParam = searchParams.get("service")
+    if (!serviceParam || selectedService) return // Déjà sélectionné ou pas de paramètre
+    
+    // Charger les services depuis la base de données pour trouver le bon ID
+    const loadAndSelectService = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("carslink_garage_services")
+          .select(`
+            name,
+            section:carslink_service_sections (
+              name,
+              icon
+            )
+          `)
+          .eq("is_active", true)
+
+        if (error) {
+          console.error("❌ Erreur lors du chargement des services:", error)
+          return
+        }
+
+        if (!data || data.length === 0) return
+
+        // Convertir le paramètre en format de recherche
+        const serviceLower = serviceParam.toLowerCase().trim()
+        
+        // Chercher le service correspondant
+        for (const service of data) {
+          const serviceName = service.name
+          const serviceId = serviceName.toLowerCase().replace(/\s+/g, '_')
+          
+          // Vérifier si le service correspond (exact ou partiel)
+          if (serviceId === serviceLower || 
+              serviceId.includes(serviceLower) || 
+              serviceLower.includes(serviceId) ||
+              serviceName.toLowerCase().includes(serviceLower) ||
+              serviceLower.includes(serviceName.toLowerCase())) {
+            setSelectedService(serviceId)
+            setSelectedServiceLabel(serviceName)
+            setCurrentStep(1)
+            console.log('✅ Service sélectionné automatiquement depuis l\'URL:', serviceName, '(', serviceId, ')')
+            break
+          }
+        }
+      } catch (error) {
+        console.error("❌ Erreur lors de la sélection automatique du service:", error)
+      }
+    }
+
+    loadAndSelectService()
+  }, [searchParams, selectedService])
 
   // Charger le prix pour un garage pré-sélectionné à l'étape 2
   useEffect(() => {
@@ -409,18 +498,60 @@ function ReservationPageContent() {
     if (!user) return
 
     try {
-      const { data, error } = await supabase
+      // Récupérer d'abord le fly_accounts.id
+      const { data: flyAccount, error: flyAccountError } = await supabase
+        .from("fly_accounts")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+
+      let vehiclesData = null
+      let vehiclesError = null
+
+      if (!flyAccountError && flyAccount?.id) {
+        // Utiliser fly_accounts.id pour charger les véhicules
+        const result = await supabase
+          .from("vehicles")
+          .select("*")
+          .eq("flynesis_user_id", flyAccount.id)
+          .order("created_at", { ascending: false })
+        
+        vehiclesData = result.data
+        vehiclesError = result.error
+
+        // Si aucun véhicule trouvé avec flyAccount.id, essayer avec user.id (anciens véhicules)
+        if (!vehiclesError && (!vehiclesData || vehiclesData.length === 0)) {
+          const fallbackResult = await supabase
+            .from("vehicles")
+            .select("*")
+            .eq("flynesis_user_id", user.id)
+            .order("created_at", { ascending: false })
+          
+          if (!fallbackResult.error && fallbackResult.data) {
+            vehiclesData = fallbackResult.data
+            vehiclesError = fallbackResult.error
+          }
+        }
+      } else {
+        // Si pas de fly_accounts, essayer avec user.id directement
+        const result = await supabase
         .from("vehicles")
         .select("*")
         .eq("flynesis_user_id", user.id)
         .order("created_at", { ascending: false })
+        
+        vehiclesData = result.data
+        vehiclesError = result.error
+      }
 
-      if (!error && data) {
-        setVehicles(data)
+      if (!vehiclesError && vehiclesData) {
+        setVehicles(vehiclesData)
         // Sélectionner automatiquement le premier véhicule s'il n'y en a qu'un
-        if (data.length === 1 && currentStep === 4) {
-          setSelectedVehicle(data[0])
+        if (vehiclesData.length === 1 && currentStep === 4) {
+          setSelectedVehicle(vehiclesData[0])
         }
+      } else if (vehiclesError) {
+        console.error("Error loading vehicles:", vehiclesError)
       }
     } catch (error) {
       console.error("Error loading vehicles:", error)
@@ -1256,7 +1387,7 @@ function ReservationPageContent() {
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         vehicle_id: vehicleIdToUse,
-        status: "pending",
+        status: "confirmed", // Automatiquement confirmé, pas de confirmation par le garage
         notes: fullNotes,
       }).select().single()
 
@@ -1772,14 +1903,14 @@ function ReservationPageContent() {
         <div className="w-full max-w-7xl mx-auto bg-white/70 backdrop-blur-2xl pb-32 sm:pb-40">
           {/* Header avec verre givré - Responsive */}
           <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10">
-            <div className="flex items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <div className="flex items-center gap-3 mb-4">
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => router.back()}
-                className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
+                className="h-10 w-10 flex-shrink-0 perfect-center"
               >
-                <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
+                <ArrowLeft className="h-5 w-5" />
               </Button>
               <div className="flex-1 min-w-0">
                 <h1 className="text-xl sm:text-2xl font-light text-gray-900 truncate">Nouveau rendez-vous</h1>
@@ -1791,15 +1922,15 @@ function ReservationPageContent() {
           <div className="px-4 sm:px-6 py-5 sm:py-6 bg-white/30 backdrop-blur-sm">
             <Card className="bg-white/60 backdrop-blur-xl border border-white/40 shadow-[0_4px_20px_rgba(0,0,0,0.08)]">
           <CardHeader className="p-4 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            <div className="flex items-center justify-between perfect-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="flex-1 min-w-0">
                   <CardTitle className="text-base sm:text-lg">Étape {currentStep} sur {getSteps().length}</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">{getSteps()[currentStep - 1].name}</CardDescription>
+                  <CardDescription className="text-xs sm:text-sm truncate mt-1">{getSteps()[currentStep - 1].name}</CardDescription>
                 </div>
               </div>
             </div>
-            <Progress value={(currentStep / getSteps().length) * 100} className="mt-3 sm:mt-4" />
+            <Progress value={(currentStep / getSteps().length) * 100} className="mt-4 h-1.5" />
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pb-6 sm:pb-8">
             {/* Step 1: Service - Ne pas afficher si on a déjà un service depuis l'URL avec un garage */}
@@ -2390,18 +2521,10 @@ function ReservationPageContent() {
                                         {getDistanceFromUser(garage)}
                                       </span>
                                     )}
-                                    {garageAvailabilityDays[garage.id] !== undefined && (
-                                      <>
-                                        {getDistanceFromUser(garage) && <span>•</span>}
-                                        <span className="text-green-600 font-medium">
-                                          {garageAvailabilityDays[garage.id]} jour{garageAvailabilityDays[garage.id] > 1 ? 's' : ''} disponible{garageAvailabilityDays[garage.id] > 1 ? 's' : ''}
-                                        </span>
-                                      </>
-                                    )}
                                   </div>
                                 </div>
 
-                                {/* Bas : étoile + avis à gauche, prix à droite */}
+                                {/* Bas : étoile + avis à gauche, bouton Réserver à droite */}
                                 <div className="flex items-center justify-between mt-3">
                                   <div className="flex items-center gap-1.5">
                                     <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-gray-400 text-gray-400" />
@@ -2410,21 +2533,21 @@ function ReservationPageContent() {
                                     <span className="text-xs text-gray-500">{garageReviewsCount[garage.id] || 0} avis</span>
                                   </div>
                                   
-                                  {/* Prix aligné à droite */}
-                                  {(() => {
-                                    const priceRange = garageServicePrices[garage.id]
-                                    if (priceRange && priceRange.min > 0) {
-                                      const priceText = priceRange.min === priceRange.max 
-                                        ? `${priceRange.min.toFixed(0)}€`
-                                        : `${priceRange.min.toFixed(0)}€ - ${priceRange.max.toFixed(0)}€`
-                                      return (
-                                        <div className="bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
-                                          <span className="text-base sm:text-lg text-green-700 font-bold">{priceText}</span>
-                                        </div>
-                                      )
-                                    }
-                                    return null
-                                  })()}
+                                  {/* Bouton Réserver */}
+                                  <motion.button 
+                                    className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedGarage(garage)
+                                      loadOpeningHours(garage.id)
+                                      loadBookingSlotsForGarage(garage.id)
+                                    }}
+                                    whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
+                                    whileTap={{ scale: 0.95 }}
+                                  >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                                    <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
+                                  </motion.button>
                                 </div>
                               </div>
                             </div>

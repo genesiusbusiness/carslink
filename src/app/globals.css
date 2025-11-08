@@ -38,16 +38,35 @@
     margin: 0;
     padding: 0;
     overflow: hidden;
-    /* Base font size pour mobile - légèrement réduit pour donner plus d'espace */
+    /* Base font size pour mobile - optimisé pour tous les écrans */
     font-size: 14px;
+    /* Empêcher le zoom automatique sur iOS */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   
+  /* Très petits écrans (iPhone SE, etc.) */
+  @media (min-width: 320px) {
+    html {
+      font-size: 14px;
+    }
+  }
+  
+  /* Petits écrans (iPhone 12/13 mini, etc.) */
+  @media (min-width: 360px) {
+    html {
+      font-size: 14.5px;
+    }
+  }
+  
+  /* Écrans moyens (iPhone standard) */
   @media (min-width: 375px) {
     html {
       font-size: 15px;
     }
   }
   
+  /* Tablettes et écrans plus grands */
   @media (min-width: 768px) {
     html {
       font-size: 16px;
@@ -69,6 +88,13 @@
     overscroll-behavior-y: none;
     /* Base line height pour meilleure lisibilité */
     line-height: 1.6;
+    /* Optimisation pour les petits écrans */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Empêcher la sélection de texte accidentelle sur mobile */
+    -webkit-tap-highlight-color: transparent;
+    /* Améliorer le rendu des polices sur mobile */
+    text-rendering: optimizeLegibility;
   }
   
   #__next {
@@ -78,16 +104,33 @@
     padding: 0;
   }
   
-  /* Container responsive par défaut */
+  /* Container responsive par défaut - optimisé pour tous les mobiles */
   .container-responsive {
     width: 100%;
     max-width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem;
-    padding-right: 1rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
   }
   
+  /* Très petits écrans */
+  @media (min-width: 320px) {
+    .container-responsive {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+  
+  /* Petits écrans */
+  @media (min-width: 360px) {
+    .container-responsive {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+  
+  /* Écrans moyens */
   @media (min-width: 375px) {
     .container-responsive {
       padding-left: 1.25rem;
@@ -95,6 +138,7 @@
     }
   }
   
+  /* Tablettes */
   @media (min-width: 640px) {
     .container-responsive {
       padding-left: 1.5rem;
@@ -229,6 +273,199 @@
   input[type="date"]::-webkit-calendar-picker-indicator:hover,
   input[type="time"]::-webkit-calendar-picker-indicator:hover {
     opacity: 1;
+  }
+  
+  /* Optimisations pour les très petits écrans (320px et moins) */
+  @media (max-width: 320px) {
+    * {
+      /* Réduire légèrement les espacements pour les très petits écrans */
+      letter-spacing: -0.01em;
+    }
+    
+    button, a {
+      /* Augmenter la zone de touch pour les très petits écrans */
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+  
+  /* Optimisations pour les petits écrans (360px et moins) */
+  @media (max-width: 360px) {
+    .container-responsive {
+      padding-left: 0.75rem;
+      padding-right: 0.75rem;
+    }
+  }
+  
+  /* Améliorer le rendu des images sur mobile */
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+  
+  /* Optimiser les boutons pour le touch */
+  button, a, [role="button"] {
+    /* Zone de touch minimale recommandée par Apple (44x44px) */
+    min-height: 44px;
+    min-width: 44px;
+    /* Améliorer le feedback tactile */
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Améliorer le rendu des inputs sur mobile */
+  input, textarea, select {
+    font-size: 16px; /* Empêcher le zoom automatique sur iOS */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+  }
+  
+  /* Optimiser les scrolls sur mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Classes utilitaires pour alignement et symétrie parfaite */
+  .perfect-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .perfect-center-x {
+    display: flex;
+    justify-content: center;
+  }
+  
+  .perfect-center-y {
+    display: flex;
+    align-items: center;
+  }
+  
+  .perfect-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  
+  .perfect-start {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  
+  .perfect-end {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  
+  /* Espacements uniformes */
+  .spacing-xs {
+    gap: 0.5rem;
+  }
+  
+  .spacing-sm {
+    gap: 0.75rem;
+  }
+  
+  .spacing-md {
+    gap: 1rem;
+  }
+  
+  .spacing-lg {
+    gap: 1.5rem;
+  }
+  
+  .spacing-xl {
+    gap: 2rem;
+  }
+  
+  /* Padding uniforme */
+  .padding-xs {
+    padding: 0.5rem;
+  }
+  
+  .padding-sm {
+    padding: 0.75rem;
+  }
+  
+  .padding-md {
+    padding: 1rem;
+  }
+  
+  .padding-lg {
+    padding: 1.5rem;
+  }
+  
+  .padding-xl {
+    padding: 2rem;
+  }
+  
+  /* Marges uniformes */
+  .margin-xs {
+    margin: 0.5rem;
+  }
+  
+  .margin-sm {
+    margin: 0.75rem;
+  }
+  
+  .margin-md {
+    margin: 1rem;
+  }
+  
+  .margin-lg {
+    margin: 1.5rem;
+  }
+  
+  .margin-xl {
+    margin: 2rem;
+  }
+  
+  /* Alignement parfait pour les textes */
+  .text-center-perfect {
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  /* Symétrie parfaite pour les cards */
+  .card-symmetric {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .card-symmetric > * {
+    flex: 1;
+  }
+  
+  /* Espacement uniforme entre les éléments */
+  .space-uniform {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .space-uniform-sm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .space-uniform-md {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+  
+  .space-uniform-lg {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
   }
 }
 

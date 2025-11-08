@@ -116,3 +116,29 @@ export interface Notification {
   link?: string | null
   created_at?: string | null
 }
+
+// Types pour le chat IA
+export interface AIChatConversation {
+  id: string
+  flynesis_user_id: string
+  vehicle_id?: string | null
+  appointment_id?: string | null
+  garage_id?: string | null
+  status?: 'active' | 'resolved' | 'archived' | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface AIChatMessage {
+  id: string
+  conversation_id: string
+  role: 'user' | 'assistant'
+  content: string
+  ai_analysis?: {
+    causes?: string[]
+    urgency?: 'urgent' | 'moderate' | 'low'
+    recommended_service?: string
+    service_id?: string
+  } | null
+  created_at?: string | null
+}

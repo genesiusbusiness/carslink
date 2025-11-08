@@ -650,9 +650,7 @@ function SearchPageContent() {
                                 <>
                                   <span className="text-gray-400">•</span>
                                   <span className="text-green-600 font-semibold">
-                                    {garageServicePrices[garage.id]!.min === garageServicePrices[garage.id]!.max
-                                      ? `${garageServicePrices[garage.id]!.min}€`
-                                      : `${garageServicePrices[garage.id]!.min}-${garageServicePrices[garage.id]!.max}€`}
+                                    {garageServicePrices[garage.id]!.min}€
                                   </span>
                                 </>
                               )}
@@ -675,8 +673,8 @@ function SearchPageContent() {
                             </div>
                             
                             {/* Bouton Réserver */}
-                            <button
-                              className="relative px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-xs font-light shadow-[0_2px_10px_rgba(59,130,246,0.3)] overflow-hidden"
+                            <motion.button 
+                              className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 // Toujours passer le garage ET le service si présent
@@ -687,10 +685,12 @@ function SearchPageContent() {
                                   router.push(`/reservation?garage=${garage.id}`)
                                 }
                               }}
+                              whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
+                              whileTap={{ scale: 0.95 }}
                             >
                               <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                              <span className="relative z-10">Réserver</span>
-                            </button>
+                              <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
+                            </motion.button>
                           </div>
                         </div>
                         </div>

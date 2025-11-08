@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
-import { Search, Wrench, Calendar, Shield, Star, Home as HomeIcon, User, Bell, Menu, MapPin, ChevronRight, Zap, Plus, TrendingUp, Circle, Droplet, ArrowRight } from "lucide-react"
+import { Search, Wrench, Calendar, Shield, Star, Home as HomeIcon, User, Bell, Menu, MapPin, ChevronRight, Zap, Plus, TrendingUp, Circle, Droplet, ArrowRight, Bot } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent } from "@/components/ui/card"
@@ -86,6 +86,107 @@ export default function HomePage() {
 
       if (!error && data) {
         setProfile(data as any)
+        
+        // Vérifier si l'utilisateur a un profil CarsLink (carslink_clients)
+        // Si ce n'est pas le cas, le créer automatiquement lors de la première connexion
+        console.log("🔍 Vérification si le profil CarsLink existe pour flyid:", data.id)
+        const { data: existingClient, error: clientCheckError } = await supabase
+          .from("carslink_clients")
+          .select("id")
+          .eq("flyid", data.id)
+          .maybeSingle()
+
+        console.log("📊 Résultat de la vérification carslink_clients:", { existingClient, clientCheckError })
+
+        if (!existingClient && !clientCheckError) {
+          // Aucun profil CarsLink trouvé, créer automatiquement
+          console.log("🆕 Création automatique du profil CarsLink pour l'utilisateur:", data.id)
+          console.log("📋 Données fly_accounts:", { id: data.id, phone: data.phone })
+          
+          // Créer carslink_clients avec ON CONFLICT pour éviter les doublons
+          console.log("⏳ Tentative d'insertion dans carslink_clients...")
+          const { data: newClient, error: clientError } = await supabase
+            .from("carslink_clients")
+            .insert({
+              flyid: data.id,
+              phone: data.phone || null,
+            })
+            .select("id")
+            .single()
+            // Note: Si une contrainte unique existe sur flyid, l'insertion échouera si un doublon existe
+            // Dans ce cas, on récupère l'entrée existante
+
+          console.log("📥 Résultat de l'insertion carslink_clients:", { newClient, clientError })
+
+          if (clientError) {
+            // Si l'erreur est due à un doublon (contrainte unique), récupérer l'entrée existante
+            if (clientError.code === '23505' || clientError.message?.includes('duplicate') || clientError.message?.includes('unique')) {
+              console.log("⚠️ Doublon détecté, récupération de l'entrée existante...")
+              const { data: existingClientData, error: fetchError } = await supabase
+                .from("carslink_clients")
+                .select("id")
+                .eq("flyid", data.id)
+                .order("created_at", { ascending: false })
+                .limit(1)
+                .maybeSingle()
+              
+              if (!fetchError && existingClientData) {
+                console.log("✅ Entrée carslink_clients existante trouvée:", existingClientData.id)
+              } else {
+                console.error("❌ Erreur lors de la récupération de l'entrée existante:", fetchError)
+              }
+            } else {
+              console.error("❌ Erreur lors de la création de carslink_clients:", clientError)
+              console.error("📋 Détails de l'erreur:", {
+                message: clientError.message,
+                code: clientError.code,
+                details: clientError.details,
+                hint: clientError.hint
+              })
+            }
+          } else {
+            console.log("✅ carslink_clients créé automatiquement:", newClient?.id)
+          }
+
+          // Créer carslink_users (pour CarsLinkSupport)
+          const { data: existingUser, error: userCheckError } = await supabase
+            .from("carslink_users")
+            .select("id")
+            .eq("flynesis_user_id", data.id)
+            .maybeSingle()
+
+          if (!existingUser && !userCheckError) {
+            console.log("⏳ Tentative d'insertion dans carslink_users...")
+            const { data: newUser, error: userError } = await supabase
+              .from("carslink_users")
+              .insert({
+                flynesis_user_id: data.id,
+                role: 'client',
+                is_active: true,
+                is_deleted: false,
+              })
+              .select("id")
+              .single()
+
+            console.log("📥 Résultat de l'insertion carslink_users:", { newUser, userError })
+
+            if (userError) {
+              console.error("❌ Erreur lors de la création de carslink_users:", userError)
+              console.error("📋 Détails de l'erreur:", {
+                message: userError.message,
+                code: userError.code,
+                details: userError.details,
+                hint: userError.hint
+              })
+            } else {
+              console.log("✅ carslink_users créé automatiquement:", newUser?.id)
+            }
+          } else if (userCheckError) {
+            console.error("❌ Erreur lors de la vérification de carslink_users:", userCheckError)
+          } else if (existingUser) {
+            console.log("ℹ️ carslink_users existe déjà:", existingUser.id)
+          }
+        }
       } else if (error && (error.code === 'PGRST116' || error.message?.includes('0 rows'))) {
         // Le compte fly_accounts est généralement créé automatiquement par le trigger handle_new_auth_user()
         // Attendre un peu et réessayer
@@ -97,6 +198,33 @@ export default function HomePage() {
             .maybeSingle()
           if (retryAccount) {
             setProfile(retryAccount as any)
+            
+            // Vérifier et créer le profil CarsLink si nécessaire
+            const { data: existingClient } = await supabase
+              .from("carslink_clients")
+              .select("id")
+              .eq("flyid", retryAccount.id)
+              .maybeSingle()
+
+            if (!existingClient) {
+              // Créer carslink_clients
+              await supabase
+                .from("carslink_clients")
+                .insert({
+                  flyid: retryAccount.id,
+                  phone: retryAccount.phone || null,
+                })
+
+              // Créer carslink_users
+              await supabase
+                .from("carslink_users")
+                .insert({
+                  flynesis_user_id: retryAccount.id,
+                  role: 'client',
+                  is_active: true,
+                  is_deleted: false,
+                })
+            }
           } else {
             // Pas de données de profil, ne rien faire
           }
@@ -437,42 +565,55 @@ export default function HomePage() {
       // Si on recherche un service spécifique, chercher dans carslink_garage_services
       let garagesData: any[] = []
       if (matchingServiceKeywords.length > 0) {
-        const { data: servicesData, error: servicesError } = await supabase
-          .from("carslink_garage_services")
-          .select("garage_id, name, garage:carslink_garages(*)")
-          .eq("is_active", true)
-          .or(matchingServiceKeywords.map(keyword => `name.ilike.%${keyword}%`).join(','))
-          .limit(20)
+        try {
+          // Construire la requête avec plusieurs conditions OR
+          const orConditions = matchingServiceKeywords.map(keyword => `name.ilike.%${keyword}%`).join(',')
+          
+          const { data: servicesData, error: servicesError } = await supabase
+            .from("carslink_garage_services")
+            .select("garage_id, name, garage:carslink_garages(*)")
+            .eq("is_active", true)
+            .or(orConditions)
+            .limit(20)
 
-        if (!servicesError && servicesData && servicesData.length > 0) {
-          const garageMap = new Map<string, any>()
-          servicesData.forEach((item: any) => {
-            if (item.garage && !garageMap.has(item.garage.id)) {
-              garageMap.set(item.garage.id, item.garage)
-            }
-          })
-          garagesData = Array.from(garageMap.values()).slice(0, 5)
+          if (!servicesError && servicesData && servicesData.length > 0) {
+            const garageMap = new Map<string, any>()
+            servicesData.forEach((item: any) => {
+              if (item.garage && !garageMap.has(item.garage.id)) {
+                garageMap.set(item.garage.id, item.garage)
+              }
+            })
+            garagesData = Array.from(garageMap.values()).slice(0, 5)
+          }
+        } catch (error) {
+          console.error("❌ Erreur lors de la recherche de services:", error)
         }
       }
 
       // Si pas de résultat par service, recherche classique par nom/ville/description
       if (garagesData.length === 0) {
-        let query = supabase
-          .from("carslink_garages")
-          .select("*")
-
         try {
-          query = query.eq("status", "active")
-        } catch (e) {
-          // Status column might not exist
-        }
+          let query = supabase
+            .from("carslink_garages")
+            .select("*")
 
-        const result = await query
-          .or(`name.ilike.%${searchLower}%,city.ilike.%${searchLower}%,description.ilike.%${searchLower}%`)
-          .limit(5)
+          try {
+            query = query.eq("status", "active")
+          } catch (e) {
+            // Status column might not exist
+          }
 
-        if (!result.error && result.data) {
-          garagesData = result.data
+          // Utiliser la syntaxe correcte pour OR avec ilike
+          const orConditions = `name.ilike.%${searchLower}%,city.ilike.%${searchLower}%,description.ilike.%${searchLower}%`
+          const result = await query
+            .or(orConditions)
+            .limit(5)
+
+          if (!result.error && result.data) {
+            garagesData = result.data
+          }
+        } catch (error) {
+          console.error("❌ Erreur lors de la recherche de garages:", error)
         }
       }
 
@@ -503,7 +644,7 @@ export default function HomePage() {
 
       setSearchResults({ 
         garages: matchingGarages.slice(0, 5), 
-        services: []
+        services: matchingServices.slice(0, 5)
       })
     } catch (error) {
       setSearchResults({ garages: [], services: [] })
@@ -557,33 +698,33 @@ export default function HomePage() {
     <div className="fixed inset-0 w-full h-full overflow-y-auto bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 pb-28 sm:pb-32 safe-area-top safe-area-bottom">
       {/* Header */}
       <div className="w-full bg-white/40 backdrop-blur-xl border-b border-white/20 sticky top-0 z-10 safe-area-top">
-        <div className="w-full px-4 sm:px-6 py-4">
+        <div className="w-full px-4 sm:px-6 py-4 sm:py-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div>
-                <h1 className="text-2xl font-light text-gray-900">Bonjour {profile?.first_name || 'à vous'}</h1>
-                <p className="text-xs text-gray-500 font-light mt-0.5">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="flex-1 min-w-0">
+                <h1 className="text-xl sm:text-2xl font-light text-gray-900 truncate">Bonjour {profile?.first_name || 'à vous'}</h1>
+                <p className="text-xs text-gray-500 font-light mt-1 truncate">
                   {userPosition ? `Vous êtes à ${userPosition.source === 'gps' ? 'votre position' : 'Paris'}` : 'Chargement...'}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               <div className="relative">
                 <motion.button
                   onClick={() => setShowNotifications(!showNotifications)}
-                  className="relative h-9 w-9 rounded-full bg-white/50 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-sm"
+                  className="relative h-10 w-10 rounded-full bg-white/50 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-sm perfect-center"
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
                   transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
-                  <Bell className="h-4 w-4 text-gray-600" />
+                  <Bell className="h-5 w-5 text-gray-600" />
                   {unreadCount > 0 && (
                     <motion.span
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
-                      className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center"
+                      className="absolute -top-1 -right-1 h-5 w-5 bg-red-500 rounded-full border-2 border-white flex items-center justify-center perfect-center"
                     >
-                      <span className="text-[10px] text-white font-bold">{unreadCount}</span>
+                      <span className="text-[10px] text-white font-bold">{unreadCount > 99 ? '99+' : unreadCount}</span>
                     </motion.span>
                   )}
                 </motion.button>
@@ -615,23 +756,23 @@ export default function HomePage() {
                         exit={{ opacity: 0, scale: 0.95, y: -10 }}
                         transition={{ duration: 0.2, ease: "easeOut" }}
                         onClick={(e) => e.stopPropagation()}
-                        className="fixed right-4 top-20 w-72 max-w-[calc(100vw-2rem)] z-[10000] bg-white/95 backdrop-blur-lg rounded-2xl border border-gray-200/50 shadow-2xl shadow-black/30 overflow-hidden pointer-events-auto"
+                        className="fixed right-2 xs:right-3 sm:right-4 top-16 xs:top-20 w-56 xs:w-52 sm:w-64 max-w-[240px] z-[10000] bg-white/95 backdrop-blur-lg rounded-lg border border-gray-200/50 shadow-xl shadow-black/20 overflow-hidden pointer-events-auto"
                       >
-                        <div className="px-3 py-2 border-b border-gray-100/80 flex items-center justify-between bg-gradient-to-r from-gray-50/50 to-white">
-                          <h3 className="text-xs font-semibold text-gray-800">Notifications</h3>
+                        <div className="px-2.5 py-1.5 border-b border-gray-100/80 flex items-center justify-between bg-gradient-to-r from-gray-50/50 to-white">
+                          <h3 className="text-[10px] font-semibold text-gray-800">Notifications</h3>
                           <motion.button
                             onClick={(e) => {
                               e.stopPropagation()
                               setShowNotifications(false)
                             }}
-                            className="h-5 w-5 rounded-full hover:bg-gray-200/60 flex items-center justify-center transition-colors"
+                            className="h-4 w-4 rounded-full hover:bg-gray-200/60 flex items-center justify-center transition-colors"
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.9 }}
                           >
-                            <X className="h-3 w-3 text-gray-500" />
+                            <X className="h-2.5 w-2.5 text-gray-500" />
                           </motion.button>
                         </div>
-                        <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
+                        <div className="max-h-[160px] overflow-y-auto custom-scrollbar">
                           {notifications.length > 0 ? (
                             <div className="divide-y divide-gray-100/60">
                               {notifications.slice(0, 5).map((notification) => (
@@ -639,7 +780,7 @@ export default function HomePage() {
                                   key={notification.id}
                                   initial={{ opacity: 0, y: 5 }}
                                   animate={{ opacity: 1, y: 0 }}
-                                  className="px-3 py-2.5 hover:bg-gray-50/80 transition-colors cursor-pointer group"
+                                  className="px-2.5 py-2 hover:bg-gray-50/80 transition-colors cursor-pointer group"
                                   onClick={() => {
                                     if (notification.link) {
                                       router.push(notification.link)
@@ -647,40 +788,40 @@ export default function HomePage() {
                                     setShowNotifications(false)
                                   }}
                                 >
-                                  <div className="flex items-start gap-2.5">
-                                    <div className={`h-1.5 w-1.5 rounded-full mt-1.5 flex-shrink-0 ${!notification.read ? 'bg-violet-500 shadow-sm shadow-violet-500/50' : 'bg-transparent'}`} />
+                                  <div className="flex items-start gap-2">
+                                    <div className={`h-1 w-1 rounded-full mt-1.5 flex-shrink-0 ${!notification.read ? 'bg-violet-500 shadow-sm shadow-violet-500/50' : 'bg-transparent'}`} />
                                     <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-semibold text-gray-900 mb-0.5 line-clamp-1 leading-tight">{notification.title}</p>
-                                      <p className="text-[11px] text-gray-500 font-light line-clamp-2 leading-snug">{notification.message}</p>
+                                      <p className="text-[10px] font-semibold text-gray-900 mb-0.5 line-clamp-1 leading-tight">{notification.title}</p>
+                                      <p className="text-[9px] text-gray-500 font-light line-clamp-2 leading-snug">{notification.message}</p>
                                     </div>
                                   </div>
                                 </motion.div>
                               ))}
                             </div>
                           ) : (
-                            <div className="p-6 text-center flex items-center justify-center min-h-[150px]">
+                            <div className="p-4 text-center flex items-center justify-center min-h-[100px]">
                               <div>
-                                <Bell className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                                <p className="text-xs text-gray-600 font-medium mb-0.5">Aucune notification</p>
-                                <p className="text-[11px] text-gray-400 font-light">Vous n'avez pas encore de notifications</p>
+                                <Bell className="h-6 w-6 text-gray-300 mx-auto mb-1.5" />
+                                <p className="text-[10px] text-gray-600 font-medium mb-0.5">Aucune notification</p>
+                                <p className="text-[9px] text-gray-400 font-light">Vous n'avez pas encore de notifications</p>
                               </div>
                             </div>
                           )}
                         </div>
                         {notifications.length > 0 && (
-                          <div className="relative px-2 py-1.5 border-t border-gray-100/80 bg-gradient-to-r from-gray-50/30 to-white flex-shrink-0">
+                          <div className="relative px-2 py-1 border-t border-gray-100/80 bg-gradient-to-r from-gray-50/30 to-white flex-shrink-0">
                             <motion.button
                               onClick={(e) => {
                                 e.stopPropagation()
                                 router.push('/notifications')
                                 setShowNotifications(false)
                               }}
-                              className="w-full py-1.5 px-2.5 text-[10px] text-violet-600 font-semibold hover:text-violet-700 rounded-md hover:bg-violet-50/60 transition-colors flex items-center justify-center gap-1"
+                              className="w-full py-1 px-2 text-[9px] text-violet-600 font-semibold hover:text-violet-700 rounded-md hover:bg-violet-50/60 transition-colors flex items-center justify-center gap-1"
                               whileHover={{ scale: 1.02 }}
                               whileTap={{ scale: 0.98 }}
                             >
                               <span>Voir toutes</span>
-                              <ChevronRight className="h-2.5 w-2.5" />
+                              <ChevronRight className="h-2 w-2" />
                             </motion.button>
                           </div>
                         )}
@@ -691,12 +832,12 @@ export default function HomePage() {
               </div>
               <motion.button 
                 onClick={() => router.push('/profile')}
-                className="h-9 w-9 rounded-full bg-white/50 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-sm"
+                className="h-10 w-10 rounded-full bg-white/50 backdrop-blur-sm flex items-center justify-center border border-white/30 shadow-sm perfect-center"
                 whileHover={{ scale: 1.1, boxShadow: "0 4px 20px rgba(0,0,0,0.1)" }}
                 whileTap={{ scale: 0.9 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
               >
-                <User className="h-4 w-4 text-gray-600" />
+                <User className="h-5 w-5 text-gray-600" />
               </motion.button>
             </div>
           </div>
@@ -809,14 +950,9 @@ export default function HomePage() {
                             </div>
                             <div className="space-y-1">
                               {searchResults.garages.slice(0, 5).map((garage) => (
-                                <motion.button
+                                <motion.div
                                   key={garage.id}
-                                  onClick={() => {
-                                    router.push(`/garage/${garage.id}`)
-                                    setShowSearchResults(false)
-                                    setSearchQuery("")
-                                  }}
-                                  className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
+                                  className="w-full px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors"
                                   whileHover={{ x: 2 }}
                                   whileTap={{ scale: 0.98 }}
                                 >
@@ -830,9 +966,22 @@ export default function HomePage() {
                                         <p className="text-xs text-gray-500 font-light">{garage.city}</p>
                                       )}
                                     </div>
-                                    <ChevronRight className="h-4 w-4 text-gray-400 flex-shrink-0 mt-1" />
+                                    <motion.button 
+                                      className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        router.push(`/reservation?garage=${garage.id}`)
+                                        setShowSearchResults(false)
+                                        setSearchQuery("")
+                                      }}
+                                      whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
+                                      whileTap={{ scale: 0.95 }}
+                                    >
+                                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+                                      <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
+                                    </motion.button>
                                   </div>
-                                </motion.button>
+                                </motion.div>
                               ))}
                             </div>
                           </div>
@@ -1005,6 +1154,33 @@ export default function HomePage() {
           </div>
         </motion.div>
 
+        {/* Assistant IA */}
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="px-6 py-6 bg-white/30 backdrop-blur-sm border-b border-white/20"
+        >
+          <motion.button
+            onClick={() => router.push('/ai-chat')}
+            className="w-full p-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl text-white shadow-lg hover:shadow-xl transition-all group relative overflow-hidden"
+            whileHover={{ scale: 1.02, y: -2 }}
+            whileTap={{ scale: 0.98 }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="relative flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                <Bot className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1 text-left">
+                <h3 className="text-base font-semibold mb-1">Assistant IA</h3>
+                <p className="text-xs text-white/90 font-light">Diagnostic intelligent de votre véhicule</p>
+              </div>
+              <ChevronRight className="h-5 w-5 text-white/80 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </motion.button>
+        </motion.div>
+
         {/* Garages recommandés avec Liquid Glass */}
         {/* Content Container - Responsive avec centrage et spacing */}
         <motion.div 
@@ -1126,16 +1302,16 @@ export default function HomePage() {
                             
                             {/* Bouton Réserver */}
                             <motion.button 
-                              className="relative px-3 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-xs font-light shadow-[0_2px_10px_rgba(59,130,246,0.3)] overflow-hidden"
+                              className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 router.push(`/reservation?garage=${garage.id}`)
                               }}
-                              whileHover={{ scale: 1.05, boxShadow: "0 4px 20px rgba(59,130,246,0.4)" }}
+                              whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
                               whileTap={{ scale: 0.95 }}
                             >
                               <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                              <span className="relative z-10">Réserver</span>
+                              <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
                             </motion.button>
                           </div>
                         </div>
