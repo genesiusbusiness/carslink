@@ -3,10 +3,15 @@ import { supabase } from '@/lib/supabase/client'
 import { createClient } from '@supabase/supabase-js'
 
 // Configuration de l'API IA
-// Utilise OpenRouter par défaut avec valeurs hardcodées (pas besoin de variables d'environnement)
+// Utilise les variables d'environnement AWS Amplify, avec fallback pour le développement local
 const AI_API_PROVIDER = 'openrouter'
-const AI_API_KEY = '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'
-const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+// Utiliser les variables d'environnement AWS Amplify, avec fallback hardcodé pour localhost
+const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
+const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'
+const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
+const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
+const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || OPENROUTER_SITE_URL
+
 // Utiliser un modèle gratuit et disponible
 // Essayer plusieurs modèles gratuits selon disponibilité
 // Modèles gratuits disponibles sur OpenRouter : meta-llama/llama-3.2-3b-instruct:free, google/gemini-flash-1.5:free, mistralai/mistral-7b-instruct:free
@@ -393,9 +398,9 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${AI_API_KEY}`,
-                // Retirer HTTP-Referer et X-Title qui pourraient causer des problèmes sur AWS
-                // 'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
-                // 'X-Title': 'CarsLink AI Assistant',
+                // Utiliser les variables d'environnement AWS Amplify pour HTTP-Referer
+                'HTTP-Referer': OPENROUTER_REFERER,
+                'X-Title': 'CarsLink AI Assistant',
               },
               body: JSON.stringify({
                 model: currentModel,

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const AI_API_KEY = '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'
-const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+// Utiliser les variables d'environnement AWS Amplify, avec fallback pour le développement local
+const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
+const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1'
+const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
+const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
 
 export async function GET(request: NextRequest) {
   try {
@@ -50,6 +53,8 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${AI_API_KEY}`,
+          'HTTP-Referer': OPENROUTER_REFERER,
+          'X-Title': 'CarsLink AI Assistant',
         },
         body: JSON.stringify({
           model: 'google/gemini-flash-1.5:free',
