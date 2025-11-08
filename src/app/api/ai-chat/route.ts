@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase/client'
 import { createClient } from '@supabase/supabase-js'
-import { assertEnv, getEnvOrThrow } from '@/lib/server/assertEnv'
 
 // Configuration de l'API IA
 // Utilise les variables d'environnement AWS Amplify, avec fallback pour le développement local
@@ -9,23 +8,18 @@ const AI_API_PROVIDER = 'openrouter'
 
 // Fonction pour obtenir la configuration OpenRouter de manière sécurisée
 function getOpenRouterConfig() {
-  // Vérifier les variables d'environnement requises
-  const envCheck = assertEnv(['OPENROUTER_API_KEY'])
-  
-  if (!envCheck.allPresent) {
-    // En production, on exige les variables d'environnement
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(`Variables d'environnement manquantes: ${envCheck.missing.join(', ')}`)
-    }
-    // En développement, utiliser les fallbacks
-  }
-  
-  const AI_API_KEY = getEnvOrThrow('OPENROUTER_API_KEY', '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')
-  const AI_API_BASE_URL = getEnvOrThrow('OPENROUTER_BASE_URL', process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1')
+  // Utiliser les variables d'environnement avec fallbacks
+  const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
+  const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
   const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
-  const OPENROUTER_SITE_URL = getEnvOrThrow('OPENROUTER_SITE_URL', process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com')
-  const OPENROUTER_REFERER = getEnvOrThrow('OPENROUTER_REFERER', OPENROUTER_SITE_URL)
-  const OPENROUTER_APP_TITLE = getEnvOrThrow('OPENROUTER_APP_TITLE', 'CarsLink Assistant')
+  const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
+  const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || OPENROUTER_SITE_URL
+  const OPENROUTER_APP_TITLE = process.env.OPENROUTER_APP_TITLE || 'CarsLink Assistant'
+  
+  // Vérifier que la clé API est présente
+  if (!AI_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY is required')
+  }
   
   return {
     AI_API_KEY,
