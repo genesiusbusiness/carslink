@@ -105,7 +105,13 @@ async function analyzeProblemWithAI(
   profile: {first_name: string, last_name: string, email: string, phone: string} | null = null
 ): Promise<AIAnalysis> {
   // Obtenir la configuration OpenRouter de manière sécurisée
-  const config = getOpenRouterConfig()
+  let config
+  try {
+    config = getOpenRouterConfig()
+  } catch (configError: any) {
+    console.error('❌ Erreur lors de la récupération de la configuration OpenRouter:', configError)
+    throw new Error(`Configuration OpenRouter invalide: ${configError.message}`)
+  }
   
   console.log('🔍 Configuration IA au début de analyzeProblemWithAI:', {
     provider: AI_API_PROVIDER,
@@ -1442,7 +1448,18 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       }
     } catch (aiError: any) {
       console.error('❌ Erreur lors de l\'analyse IA:', aiError)
-      const config = getOpenRouterConfig()
+      let config
+      try {
+        config = getOpenRouterConfig()
+      } catch (configError: any) {
+        console.error('❌ Erreur lors de la récupération de la configuration OpenRouter dans le catch:', configError)
+        config = {
+          AI_API_KEY: 'N/A',
+          AI_API_URL: 'N/A',
+          OPENROUTER_REFERER: 'N/A',
+          OPENROUTER_SITE_URL: 'N/A',
+        }
+      }
       console.error('❌ Détails de l\'erreur:', {
         message: aiError.message,
         stack: aiError.stack,
