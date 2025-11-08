@@ -113,7 +113,11 @@ async function analyzeProblemWithAI(
     url: config.AI_API_URL,
     apiKeyLength: config.AI_API_KEY?.length || 0,
     apiKeyPrefix: config.AI_API_KEY ? `${config.AI_API_KEY.substring(0, 20)}...` : 'N/A',
+    apiKeySuffix: config.AI_API_KEY ? `...${config.AI_API_KEY.substring(config.AI_API_KEY.length - 10)}` : 'N/A',
+    apiKeyFull: config.AI_API_KEY, // Log complet pour débogage
     apiKeyFromEnv: !!process.env.OPENROUTER_API_KEY,
+    apiKeyFromEnvValue: process.env.OPENROUTER_API_KEY ? `${process.env.OPENROUTER_API_KEY.substring(0, 20)}...` : 'N/A',
+    apiKeyFromEnvLength: process.env.OPENROUTER_API_KEY?.length || 0,
     referer: config.OPENROUTER_REFERER,
     siteUrl: config.OPENROUTER_SITE_URL,
     userMessage: userMessage.substring(0, 50),
