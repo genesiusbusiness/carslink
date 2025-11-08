@@ -8,7 +8,8 @@ const AI_API_PROVIDER = 'openrouter'
 const AI_API_KEY = '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'
 const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 // Utiliser un modèle gratuit et disponible
-const AI_MODEL = 'mistralai/mistral-7b-instruct:free'
+// Essayer plusieurs modèles gratuits selon disponibilité
+const AI_MODEL = 'google/gemini-flash-1.5:free' // Modèle gratuit et fiable
 
 // Supabase Admin pour les opérations serveur
 // Créer le client Supabase Admin de manière sécurisée
@@ -66,9 +67,14 @@ async function analyzeProblemWithAI(
   vehicles: Array<{id: string, brand: string, model: string, license_plate: string, year: number, fuel_type: string}> = [],
   profile: {first_name: string, last_name: string, email: string, phone: string} | null = null
 ): Promise<AIAnalysis> {
-  if (!AI_API_KEY) {
-    throw new Error('API key not configured')
-  }
+  // L'API key est toujours configurée (hardcodée), pas besoin de vérifier
+  console.log('🔍 Configuration IA au début de analyzeProblemWithAI:', {
+    provider: AI_API_PROVIDER,
+    model: AI_MODEL,
+    url: AI_API_URL,
+    apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 15)}...` : 'NON DÉFINIE',
+    userMessage: userMessage.substring(0, 50),
+  })
 
   // Détecter si c'est une salutation
   const isGreeting = /^(bonjour|salut|bonsoir|hello|hi|bonne\s+(journée|soirée)|à\s+bientôt|merci|au\s+revoir)/i.test(userMessage.trim())
@@ -345,24 +351,41 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
         apiKey: AI_API_KEY ? `${AI_API_KEY.substring(0, 10)}...` : 'NON DÉFINIE',
       })
       
-      response = await fetch(AI_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${AI_API_KEY}`,
-          'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
-          'X-Title': 'CarsLink AI Assistant',
-        },
-        body: JSON.stringify({
-          model: AI_MODEL,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.7,
-          max_tokens: 2000, // Augmenter pour avoir plus de tokens
-        }),
-      })
+      // Créer un AbortController pour gérer le timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 secondes de timeout
+      
+      try {
+        response = await fetch(AI_API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${AI_API_KEY}`,
+            'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'https://carslink.app',
+            'X-Title': 'CarsLink AI Assistant',
+          },
+          body: JSON.stringify({
+            model: AI_MODEL,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt },
+            ],
+            temperature: 0.7,
+            max_tokens: 2000, // Augmenter pour avoir plus de tokens
+          }),
+          signal: controller.signal, // Ajouter le signal pour le timeout
+        })
+        
+        clearTimeout(timeoutId) // Annuler le timeout si la requête réussit
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          console.error('❌ Timeout lors de l\'appel OpenRouter API (30 secondes)')
+          throw new Error('OpenRouter API timeout: La requête a pris plus de 30 secondes')
+        }
+        console.error('❌ Erreur réseau lors de l\'appel OpenRouter API:', fetchError)
+        throw new Error(`OpenRouter API network error: ${fetchError.message}`)
+      }
       
       console.log('✅ Réponse OpenRouter reçue:', {
         status: response.status,
@@ -385,12 +408,43 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
       }
 
       responseData = await response.json()
+      console.log('📥 Réponse OpenRouter complète:', {
+        hasChoices: !!responseData.choices,
+        choicesCount: responseData.choices?.length || 0,
+        hasContent: !!responseData.choices?.[0]?.message?.content,
+        contentLength: responseData.choices?.[0]?.message?.content?.length || 0,
+        responseKeys: Object.keys(responseData),
+      })
+      
       const aiResponse = responseData.choices?.[0]?.message?.content || ''
+      
+      if (!aiResponse) {
+        console.error('❌ Réponse OpenRouter vide:', JSON.stringify(responseData, null, 2))
+        throw new Error('OpenRouter API returned empty response')
+      }
+      
+      console.log('✅ Contenu de la réponse IA reçu:', {
+        length: aiResponse.length,
+        preview: aiResponse.substring(0, 200),
+      })
 
       // Parser la réponse JSON
       try {
+        console.log('🔍 Tentative de parsing de la réponse IA...')
         const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
-        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(aiResponse)
+        if (!jsonMatch) {
+          console.error('❌ Aucun JSON trouvé dans la réponse IA:', aiResponse.substring(0, 500))
+          throw new Error('No JSON found in AI response')
+        }
+        console.log('✅ JSON trouvé dans la réponse, longueur:', jsonMatch[0].length)
+        const parsed = JSON.parse(jsonMatch[0])
+        console.log('✅ JSON parsé avec succès:', {
+          hasCauses: !!parsed.causes,
+          hasUrgency: !!parsed.urgency,
+          hasRecommendedService: !!parsed.recommended_service,
+          hasSuggestedQuestions: !!parsed.suggested_questions,
+          keys: Object.keys(parsed),
+        })
         
         // Traiter les questions suggérées et remplacer les références aux véhicules
         let processedQuestions = parsed.suggested_questions || []
@@ -598,9 +652,15 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
           diagnostic_complete: parsed.diagnostic_complete || false,
           suggested_questions: finalQuestions,
         }
-      } catch (parseError) {
+      } catch (parseError: any) {
         // Fallback si le parsing échoue - retourner des questions génériques mais vides pour forcer l'IA à générer
         console.error('❌ Erreur lors du parsing de la réponse IA:', parseError)
+        console.error('❌ Détails de l\'erreur de parsing:', {
+          message: parseError.message,
+          stack: parseError.stack,
+          name: parseError.name,
+          aiResponse: aiResponse.substring(0, 1000),
+        })
         // Ne pas retourner de questions pré-définies - l'IA doit tout générer dynamiquement
         return {
           causes: [],
