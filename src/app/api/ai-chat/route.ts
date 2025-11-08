@@ -35,9 +35,9 @@ function getOpenRouterConfig() {
 // Essayer plusieurs modèles gratuits selon disponibilité
 // Modèles gratuits disponibles sur OpenRouter : meta-llama/llama-3.2-3b-instruct:free, google/gemini-flash-1.5:free, mistralai/mistral-7b-instruct:free
 // Liste de modèles à essayer en cas d'échec (du plus fiable au moins fiable)
+// Note: meta-llama/llama-3.2-3b-instruct:free est souvent rate-limited, donc retiré
 const AI_MODELS = [
   'google/gemini-flash-1.5:free', // Le plus fiable
-  'meta-llama/llama-3.2-3b-instruct:free',
   'mistralai/mistral-7b-instruct:free',
 ]
 const AI_MODEL = AI_MODELS[0] // Modèle par défaut
@@ -536,10 +536,11 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
               break
             }
             
-            // Si c'est une erreur 429 (rate limit), ne pas réessayer
+            // Si c'est une erreur 429 (rate limit), essayer le modèle suivant
             if (response.status === 429) {
+              console.warn(`⚠️ Rate limit (429) avec le modèle ${currentModel}, essai du modèle suivant...`)
               lastError = new Error(`OpenRouter API error: ${response.status} - ${errorText}`)
-              break // Arrêter les tentatives
+              continue // Essayer le modèle suivant au lieu de s'arrêter
             }
             
             // Pour les autres erreurs, essayer le modèle suivant
