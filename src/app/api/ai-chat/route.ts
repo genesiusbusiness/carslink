@@ -3,11 +3,11 @@ import { supabase } from '@/lib/supabase/client'
 import { createClient } from '@supabase/supabase-js'
 
 // Configuration de l'API IA
-// Utilise OpenRouter par défaut
-const AI_API_PROVIDER = process.env.AI_PROVIDER || process.env.AI_API_PROVIDER || 'openrouter'
-const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
-const AI_API_URL = process.env.AI_API_URL || 'https://openrouter.ai/api/v1/chat/completions'
-const AI_MODEL = process.env.AI_MODEL || 'mistralai/mixtral-8x7b-instruct'
+// Utilise OpenRouter par défaut avec valeurs hardcodées (pas besoin de variables d'environnement)
+const AI_API_PROVIDER = 'openrouter'
+const AI_API_KEY = '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'
+const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const AI_MODEL = 'mistralai/mixtral-8x7b-instruct'
 
 // Supabase Admin pour les opérations serveur
 // Créer le client Supabase Admin de manière sécurisée
@@ -15,13 +15,9 @@ let supabaseAdmin: ReturnType<typeof createClient> | null = null
 
 function getSupabaseAdmin() {
   if (!supabaseAdmin) {
-    // Pour le développement local, utiliser les valeurs hardcodées si les variables d'environnement ne sont pas définies
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yxkbvhymsvasknslhpsa.supabase.co'
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY3MjUyNCwiZXhwIjoyMDc3MjQ4NTI0fQ.kn1G0sBMZ0beUbHE3fo1eUv0ZygPAt6adrghVXw9Nac'
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error('Supabase environment variables are not configured')
-    }
+    // Valeurs hardcodées directement (pas besoin de variables d'environnement)
+    const supabaseUrl = 'https://yxkbvhymsvasknslhpsa.supabase.co'
+    const serviceRoleKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY3MjUyNCwiZXhwIjoyMDc3MjQ4NTI0fQ.kn1G0sBMZ0beUbHE3fo1eUv0ZygPAt6adrghVXw9Nac'
 
     supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
       auth: {
@@ -340,7 +336,7 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
     let response: Response
     let responseData: any
 
-    if (AI_API_PROVIDER === 'openrouter' || !process.env.AI_API_PROVIDER) {
+    if (AI_API_PROVIDER === 'openrouter') {
       // Utiliser OpenRouter avec le modèle configuré
       response = await fetch(AI_API_URL, {
         method: 'POST',
