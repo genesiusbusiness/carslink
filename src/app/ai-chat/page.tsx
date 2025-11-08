@@ -257,6 +257,13 @@ export default function AIChatPage() {
           } : null,
         }),
       })
+      
+      console.log('📥 Réponse HTTP reçue:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        contentType: response.headers.get('content-type'),
+      })
 
       // Vérifier le type de contenu de la réponse
       const contentType = response.headers.get('content-type')
@@ -287,10 +294,20 @@ export default function AIChatPage() {
       }
 
       let data
+      let responseText: string | undefined
       try {
-        data = await response.json()
-      } catch (e) {
+        responseText = await response.text()
+        console.log('📥 Réponse brute de l\'API (premiers 500 caractères):', responseText.substring(0, 500))
+        data = JSON.parse(responseText)
+        console.log('✅ JSON parsé avec succès:', {
+          success: data.success,
+          hasMessage: !!data.message,
+          hasAnalysis: !!data.analysis,
+          analysisKeys: data.analysis ? Object.keys(data.analysis) : [],
+        })
+      } catch (e: any) {
         console.error('❌ Erreur lors du parsing JSON:', e)
+        console.error('❌ Réponse texte reçue:', responseText?.substring(0, 1000))
         throw new Error('Réponse invalide du serveur')
       }
 
@@ -299,6 +316,23 @@ export default function AIChatPage() {
         setConversationId(data.conversationId)
       }
 
+      // Vérifier si la réponse contient une erreur ou un message d'indisponibilité
+      if (data.message && data.message.content && data.message.content.includes('temporairement indisponible')) {
+        console.error('⚠️ Message d\'indisponibilité détecté dans la réponse:', data.message.content)
+        console.error('⚠️ Analyse reçue:', data.analysis)
+        console.error('⚠️ Message complet:', data.message)
+        
+        // Afficher les détails de l'erreur si disponibles
+        if (data.error_details) {
+          console.error('❌ DÉTAILS DE L\'ERREUR (côté serveur):', data.error_details)
+          console.error('❌ Message d\'erreur:', data.error_details.message)
+          console.error('❌ Nom de l\'erreur:', data.error_details.name)
+          console.error('❌ Stack trace:', data.error_details.stack)
+        } else {
+          console.warn('⚠️ Aucun détail d\'erreur disponible dans la réponse')
+        }
+      }
+      
       // Remplacer le message temporaire par le message réel de l'utilisateur et ajouter le message de l'assistant
       setMessages((prev) => {
         const filtered = prev.filter((msg) => msg.id !== tempUserMessage.id)
@@ -346,7 +380,25 @@ export default function AIChatPage() {
       if (data.analysis && data.analysis.recommended_service) {
         setApiAvailable(true)
       }
+      
+      // Log de la réponse complète pour débogage
+      console.log('✅ Réponse complète de l\'API:', {
+        success: data.success,
+        hasMessage: !!data.message,
+        hasAnalysis: !!data.analysis,
+        analysis: data.analysis,
+        hasSuggestedQuestions: !!data.suggestedQuestions,
+        suggestedQuestionsCount: data.suggestedQuestions?.length || 0,
+      })
     } catch (error: any) {
+      console.error('❌ ERREUR CAPTURÉE dans sendMessage:', error)
+      console.error('❌ Détails de l\'erreur:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name,
+        response: error.response,
+        status: error.status,
+      })
       console.error('❌ Erreur lors de l\'envoi du message:', error)
       
       // Afficher un message d'erreur

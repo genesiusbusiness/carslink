@@ -9,7 +9,8 @@ const AI_API_KEY = 'sk-or-v1-06487ee0c6af5dbb509610cc72b254f40e68990739acff6b4cd
 const AI_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
 // Utiliser un modèle gratuit et disponible
 // Essayer plusieurs modèles gratuits selon disponibilité
-const AI_MODEL = 'google/gemini-flash-1.5:free' // Modèle gratuit et fiable
+// Modèles gratuits disponibles sur OpenRouter : meta-llama/llama-3.2-3b-instruct:free, google/gemini-flash-1.5:free, mistralai/mistral-7b-instruct:free
+const AI_MODEL = 'meta-llama/llama-3.2-3b-instruct:free' // Modèle gratuit et fiable
 
 // Supabase Admin pour les opérations serveur
 // Créer le client Supabase Admin de manière sécurisée
@@ -1319,12 +1320,23 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       })
       
       // En cas d'erreur, retourner le message d'indisponibilité demandé
+      // MAIS aussi inclure l'erreur dans les logs et dans la réponse pour débogage
+      const errorDetails = {
+        message: aiError.message,
+        name: aiError.name,
+        stack: aiError.stack?.substring(0, 500), // Limiter la taille
+      }
+      
+      console.error('❌ ERREUR COMPLÈTE CAPTURÉE:', JSON.stringify(errorDetails, null, 2))
+      
       aiAnalysis = {
         causes: ['Service temporairement indisponible'],
         urgency: 'moderate',
         recommended_service: 'Diagnostic électronique',
         service_id: 'diagnostic',
-      }
+        // Ajouter les détails de l'erreur pour débogage (en développement uniquement)
+        ...(process.env.NODE_ENV === 'development' ? { error_details: errorDetails } : {}),
+      } as AIAnalysis
       aiResponse = '🚧 Le service CarsLink Assistant est temporairement indisponible. Réessayez plus tard.'
     }
 
@@ -1359,23 +1371,45 @@ Souhaitez-vous réserver un rendez-vous pour ce service ?`
       suggestedQuestions: aiAnalysis.suggested_questions
     })
 
-    return NextResponse.json({
+    // Inclure les détails de l'erreur dans la réponse si disponible (pour débogage)
+    const responseData: any = {
       success: true,
       conversationId: conversationIdToUse,
       userMessage: savedUserMessage, // Retourner le message de l'utilisateur enregistré dans la base
       message: aiMessage,
       analysis: aiAnalysis,
       suggestedQuestions: aiAnalysis.suggested_questions || [],
-    })
+    }
+    
+    // Si c'est un message d'indisponibilité, inclure les détails de l'erreur pour débogage
+    if (aiResponse.includes('temporairement indisponible') && (aiAnalysis as any).error_details) {
+      responseData.error_details = (aiAnalysis as any).error_details
+      console.log('⚠️ Détails de l\'erreur inclus dans la réponse:', (aiAnalysis as any).error_details)
+    }
+    
+    return NextResponse.json(responseData)
   } catch (error: any) {
     console.error('❌ Erreur dans /api/ai-chat POST:', error)
+    console.error('❌ Détails complets de l\'erreur:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      cause: error.cause,
+      response: error.response,
+      status: error.status,
+    })
     
     // S'assurer de toujours retourner du JSON
     try {
       return NextResponse.json(
         { 
           error: 'Internal server error', 
-          details: process.env.NODE_ENV === 'development' ? error.message : 'Une erreur est survenue'
+          details: process.env.NODE_ENV === 'development' ? error.message : 'Une erreur est survenue',
+          // En production, retourner aussi les détails pour le débogage
+          debug: process.env.NODE_ENV === 'production' ? {
+            message: error.message,
+            name: error.name,
+          } : undefined,
         },
         { status: 500 }
       )
