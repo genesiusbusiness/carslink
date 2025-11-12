@@ -97,6 +97,50 @@
     text-rendering: optimizeLegibility;
   }
   
+  /* Empêcher le zoom automatique sur iOS en s'assurant que tous les inputs ont au moins 16px */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="search"],
+  input[type="url"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+  
+  /* Empêcher le zoom sur les éléments interactifs */
+  button,
+  a,
+  [role="button"],
+  [onclick],
+  [tabindex]:not([tabindex="-1"]) {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Pour les très petits écrans, on peut réduire mais jamais en dessous de 16px */
+  @media (max-width: 360px) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="search"],
+    input[type="url"],
+    input[type="date"],
+    input[type="time"],
+    input[type="datetime-local"],
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
+  }
+  
   #__next {
     height: 100%;
     width: 100%;

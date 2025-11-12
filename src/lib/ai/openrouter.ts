@@ -33,22 +33,21 @@ export const OPENROUTER_HEADERS = getOpenRouterHeaders();
 
 // Liste **strictement gratuite** de modèles OpenRouter
 export const FREE_MODELS = [
-  "minimax/minimax-m2:free",
   "openrouter/polaris-alpha",
+  "deepseek/deepseek-chat-v3.1:free",
+  "google/gemini-2.0-flash-exp:free",
+  "google/gemini-flash-1.5:free",
+  "deepseek/deepseek-r1-0528:free",
+  "deepseek/deepseek-r1-0528-qwen3-8b:free",
+  "google/gemma-3n-e4b-it:free",
+  "google/gemma-3n-e2b-it:free",
   "nvidia/nemotron-nano-12b-v2-vl:free",
   "meituan/longcat-flash-chat:free",
-  "deepseek/deepseek-chat-v3.1:free",
   "openai/gpt-oss-20b:free",
   "z-ai/glm-4.5-air:free",
   "qwen/qwen3-coder:free",
-  "google/gemma-3n-e2b-it:free",
   "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-  "deepseek/deepseek-r1-0528-qwen3-8b:free",
-  "deepseek/deepseek-r1-0528:free",
-  "google/gemma-3n-e4b-it:free",
-  "google/gemini-2.0-flash-exp:free",
   // Modèles de fallback supplémentaires (anciens modèles qui fonctionnent encore)
-  "google/gemini-flash-1.5:free",
   "mistralai/mistral-7b-instruct:free",
 ] as const;
 

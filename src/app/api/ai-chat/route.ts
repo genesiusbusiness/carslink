@@ -399,6 +399,12 @@ Réponds UNIQUEMENT en JSON, sans texte supplémentaire. Tous les textes dans le
             break
           }
           
+          // 404 → modèle non disponible, passer au suivant
+          if (result.status === 404) {
+            console.warn(`⚠️ Modèle ${model} non disponible (404), essai du modèle suivant...`)
+            continue
+          }
+          
           // 429/500/503/408 → on tente le modèle suivant
           if (![429, 500, 503, 408].includes(result.status)) {
             console.warn(`⚠️ Erreur non récupérable (${result.status}) avec ${model}, arrêt des tentatives`)

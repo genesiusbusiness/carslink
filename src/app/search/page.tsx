@@ -603,7 +603,10 @@ function SearchPageContent() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <div className="relative group">
+                      <div 
+                        className="relative group cursor-pointer"
+                        onClick={() => router.push(`/garage/${garage.id}`)}
+                      >
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/10 to-blue-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     <div className="relative bg-white/60 backdrop-blur-xl border border-white/40 rounded-2xl p-4 sm:p-5 shadow-[0_4px_20px_rgba(0,0,0,0.08)] group-hover:shadow-[0_12px_40px_rgba(59,130,246,0.2)] group-hover:border-blue-300/50 transition-all duration-300">
                       <div className="flex gap-3 sm:gap-4">
@@ -663,34 +666,14 @@ function SearchPageContent() {
                             </div>
                           </div>
 
-                          {/* Bas : étoile + avis à gauche, bouton Réserver à droite */}
-                          <div className="flex items-center justify-between mt-3">
+                          {/* Bas : étoile + avis */}
+                          <div className="flex items-center mt-3">
                             <div className="flex items-center gap-1.5">
                               <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-gray-400 text-gray-400" />
                               <span className="text-xs sm:text-sm font-medium text-gray-700">{garage.rating?.toFixed(1) || "0.0"}</span>
                               <span className="text-xs text-gray-500">•</span>
                               <span className="text-xs text-gray-500">{garageReviewsCount[garage.id] || 0} avis</span>
                             </div>
-                            
-                            {/* Bouton Réserver */}
-                            <motion.button 
-                              className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                // Toujours passer le garage ET le service si présent
-                                const serviceParam = searchParams.get("service")
-                                if (serviceParam) {
-                                  router.push(`/reservation?garage=${garage.id}&service=${encodeURIComponent(serviceParam)}`)
-                                } else {
-                                  router.push(`/reservation?garage=${garage.id}`)
-                                }
-                              }}
-                              whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
-                              whileTap={{ scale: 0.95 }}
-                            >
-                              <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                              <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
-                            </motion.button>
                           </div>
                         </div>
                         </div>

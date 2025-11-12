@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Save, Bell, Mail, Smartphone, MapPin, ExternalLink, User } from "lucide-react"
+import { ArrowLeft, Save, Bell, Mail, Smartphone, MapPin, ExternalLink, User, Info, FileText, Shield, Scale } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -495,6 +495,108 @@ export default function SettingsPage() {
                       Gérer les notifications
                     </Button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* À propos et Informations légales */}
+            <Card className="mb-4 bg-white/80 backdrop-blur-xl border border-white/60 shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                  <Info className="h-5 w-5" />
+                  À propos
+                </CardTitle>
+                <CardDescription className="text-sm text-gray-600">
+                  Informations sur l'application et mentions légales
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Version */}
+                <div className="pb-3 border-b border-gray-200">
+                  <p className="text-sm font-medium text-gray-900 mb-1">Version de l'application</p>
+                  <p className="text-sm text-gray-600">CarsLink v1.0.0</p>
+                </div>
+
+                {/* Informations sur l'entreprise */}
+                <div className="pb-3 border-b border-gray-200">
+                  <p className="text-sm font-medium text-gray-900 mb-2">Éditeur</p>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p><strong>Flynesis</strong></p>
+                    <p>Plateforme de services automobiles</p>
+                    <p className="pt-2 text-xs text-gray-500">
+                      Pour toute question ou réclamation, contactez-nous via le support.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Liens légaux */}
+                <div className="space-y-2">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 hover:bg-gray-50 rounded-xl"
+                    onClick={() => {
+                      toast({
+                        title: "Mentions légales",
+                        description: "Les mentions légales complètes sont disponibles sur notre site web.",
+                        variant: "default",
+                      })
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <FileText className="h-4 w-4 text-gray-600" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">Mentions légales</span>
+                    </div>
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 hover:bg-gray-50 rounded-xl"
+                    onClick={() => {
+                      toast({
+                        title: "Politique de confidentialité",
+                        description: "Notre politique de confidentialité explique comment nous collectons et utilisons vos données.",
+                        variant: "default",
+                      })
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <Shield className="h-4 w-4 text-gray-600" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">Politique de confidentialité</span>
+                    </div>
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start h-12 hover:bg-gray-50 rounded-xl"
+                    onClick={() => {
+                      toast({
+                        title: "Conditions d'utilisation",
+                        description: "Les conditions d'utilisation régissent l'utilisation de l'application CarsLink.",
+                        variant: "default",
+                      })
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-gray-100">
+                        <Scale className="h-4 w-4 text-gray-600" />
+                      </div>
+                      <span className="text-sm font-medium text-gray-900">Conditions d'utilisation</span>
+                    </div>
+                  </Button>
+                </div>
+
+                {/* Copyright */}
+                <div className="pt-4 border-t border-gray-200">
+                  <p className="text-xs text-gray-500 text-center">
+                    © {new Date().getFullYear()} Flynesis. Tous droits réservés.
+                  </p>
+                  <p className="text-xs text-gray-400 text-center mt-1">
+                    CarsLink est une marque de Flynesis
+                  </p>
                 </div>
               </CardContent>
             </Card>

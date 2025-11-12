@@ -1291,28 +1291,14 @@ export default function HomePage() {
                             </div>
                           </div>
 
-                          {/* Bas : étoile + avis à gauche, bouton Réserver à droite */}
-                          <div className="flex items-center justify-between mt-3">
+                          {/* Bas : étoile + avis */}
+                          <div className="flex items-center mt-3">
                             <div className="flex items-center gap-1.5">
                               <Star className="h-3.5 w-3.5 sm:h-4 sm:w-4 fill-gray-400 text-gray-400" />
                               <span className="text-xs sm:text-sm font-medium text-gray-700">{garage.rating?.toFixed(1) || "0.0"}</span>
                               <span className="text-xs text-gray-500">•</span>
                               <span className="text-xs text-gray-500">{garageReviewsCount[garage.id] || 0} avis</span>
                             </div>
-                            
-                            {/* Bouton Réserver */}
-                            <motion.button 
-                              className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                router.push(`/reservation?garage=${garage.id}`)
-                              }}
-                              whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
-                              whileTap={{ scale: 0.95 }}
-                            >
-                              <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                              <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
-                            </motion.button>
                           </div>
                         </div>
                       </div>

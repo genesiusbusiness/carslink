@@ -2505,7 +2505,7 @@ function ReservationPageContent() {
                                 <div>
                                   <h3 className="text-gray-900 text-base sm:text-lg font-medium truncate mb-2">{garage.name}</h3>
                                   
-                                  {/* Infos : ville, distance */}
+                                  {/* Infos : ville, distance, prix */}
                                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-gray-500 font-light">
                                     {garage.city && (
                                       <>
@@ -2513,12 +2513,20 @@ function ReservationPageContent() {
                                           <MapPin className="h-3 w-3" />
                                           <span>{garage.city}</span>
                                         </div>
-                                        {getDistanceFromUser(garage) && <span>•</span>}
+                                        {(getDistanceFromUser(garage) || garageServicePrices[garage.id]) && <span>•</span>}
                                       </>
                                     )}
                                     {getDistanceFromUser(garage) && (
-                                      <span className="text-blue-600 font-medium">
-                                        {getDistanceFromUser(garage)}
+                                      <>
+                                        <span className="text-blue-600 font-medium">
+                                          {getDistanceFromUser(garage)}
+                                        </span>
+                                        {garageServicePrices[garage.id] && <span>•</span>}
+                                      </>
+                                    )}
+                                    {garageServicePrices[garage.id] && (
+                                      <span className="text-green-600 font-semibold">
+                                        À partir de {garageServicePrices[garage.id]!.min}€
                                       </span>
                                     )}
                                   </div>
@@ -2535,18 +2543,18 @@ function ReservationPageContent() {
                                   
                                   {/* Bouton Réserver */}
                                   <motion.button 
-                                    className="relative px-2 py-0.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full text-[8px] font-medium shadow-sm overflow-hidden perfect-center h-[20px] min-w-[50px]"
+                                    className="relative px-3 py-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-xs font-medium shadow-sm overflow-hidden transition-all duration-200 hover:shadow-md"
                                     onClick={(e) => {
                                       e.stopPropagation()
                                       setSelectedGarage(garage)
                                       loadOpeningHours(garage.id)
                                       loadBookingSlotsForGarage(garage.id)
                                     }}
-                                    whileHover={{ scale: 1.05, boxShadow: "0 2px 8px rgba(59,130,246,0.3)" }}
-                                    whileTap={{ scale: 0.95 }}
+                                    whileHover={{ scale: 1.02, boxShadow: "0 4px 12px rgba(59,130,246,0.4)" }}
+                                    whileTap={{ scale: 0.98 }}
                                   >
-                                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-                                    <span className="relative z-10 leading-tight tracking-normal">Réserver</span>
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-200" />
+                                    <span className="relative z-10">Réserver</span>
                                   </motion.button>
                                 </div>
                               </div>
@@ -3361,7 +3369,7 @@ function ReservationPageContent() {
 
                 <Button
                   onClick={handleSubmit}
-                  className="w-full h-12 sm:h-14 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-base sm:text-lg font-semibold shadow-lg hover:shadow-xl transition-all rounded-xl"
+                  className="w-full h-10 sm:h-11 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white text-sm sm:text-base font-medium shadow-md hover:shadow-lg transition-all duration-200 rounded-lg"
                   disabled={loading}
                 >
                   {loading ? (

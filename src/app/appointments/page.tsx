@@ -327,7 +327,7 @@ export default function AppointmentsPage() {
           </div>
 
           {/* Filtres - Responsive */}
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-4 sm:mx-0 px-4 sm:px-0">
+          <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 -mx-4 sm:mx-0 px-4 sm:px-0">
           {[
             { id: "all" as FilterType, label: "Tous" },
             { id: "upcoming" as FilterType, label: "À venir" },
@@ -341,9 +341,9 @@ export default function AppointmentsPage() {
               variant="ghost"
               size="sm"
               onClick={() => setFilter(filterOption.id)}
-              className={`whitespace-nowrap rounded-xl transition-all duration-200 ${
+              className={`whitespace-nowrap rounded-xl transition-all duration-200 flex-shrink-0 min-w-fit px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium ${
                 filter === filterOption.id
-                  ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md shadow-blue-500/30 hover:from-blue-600 hover:to-purple-600 font-medium"
+                  ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-md shadow-blue-500/30 hover:from-blue-600 hover:to-purple-600"
                   : "bg-white/60 backdrop-blur-sm text-gray-600 hover:bg-white/80 hover:text-gray-900 border border-gray-200/50"
               }`}
             >

@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Send, Bot, User, AlertCircle, Clock, CheckCircle, Calendar, X, Check, Trash2 } from "lucide-react"
+import { ArrowLeft, Send, Bot, User, AlertCircle, Clock, CheckCircle, Calendar, X, Check, Trash2, Menu, Plus, Car } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { BottomNavigation } from "@/components/layout/BottomNavigation"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { supabase } from "@/lib/supabase/client"
@@ -24,6 +25,8 @@ export default function AIChatPage() {
   const [apiAvailable, setApiAvailable] = useState(true)
   const [suggestedQuestions, setSuggestedQuestions] = useState<Array<{question: string, options: string[]}>>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null)
+  const [showVehicleSelector, setShowVehicleSelector] = useState(false)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [conversations, setConversations] = useState<Array<{id: string, created_at: string, updated_at: string, message_count: number}>>([])
   const [showConversationsList, setShowConversationsList] = useState(false)
@@ -100,9 +103,19 @@ export default function AIChatPage() {
             vehiclesData.forEach((v, i) => {
               console.log(`  ${i + 1}. ${v.brand} ${v.model}${v.year ? ` (${v.year})` : ''}${v.license_plate ? ` - ${v.license_plate}` : ''}`)
             })
-            setVehicles(vehiclesData as Vehicle[])
+            const vehiclesList = vehiclesData as Vehicle[]
+            setVehicles(vehiclesList)
+            
+            // Si aucun véhicule n'est sélectionné et qu'il y a des véhicules, afficher le sélecteur
+            if (vehiclesList.length > 0 && !selectedVehicle) {
+              setShowVehicleSelector(true)
+            }
           } else {
             console.log('ℹ️ Aucun véhicule trouvé dans le profil CarsLink')
+            // Si aucun véhicule, afficher quand même le sélecteur pour informer l'utilisateur
+            if (vehicles.length === 0) {
+              setShowVehicleSelector(true)
+            }
           }
         }
       } catch (error) {
@@ -113,7 +126,7 @@ export default function AIChatPage() {
     loadUserData()
   }, [user])
 
-  // Charger l'historique des conversations (24h)
+  // Charger l'historique des conversations (15 jours)
   useEffect(() => {
     if (!user) return
 
@@ -127,15 +140,27 @@ export default function AIChatPage() {
 
         if (!flyAccount) return
 
-        // Récupérer les conversations des dernières 24h
-        const yesterday = new Date()
-        yesterday.setHours(yesterday.getHours() - 24)
+        // Récupérer les conversations des 15 derniers jours
+        const fifteenDaysAgo = new Date()
+        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15)
+
+        // Supprimer automatiquement les conversations de plus de 15 jours
+        const { error: deleteError } = await supabase
+          .from('ai_chat_conversations')
+          .delete()
+          .eq('flynesis_user_id', flyAccount.id)
+          .lt('created_at', fifteenDaysAgo.toISOString())
+
+        if (deleteError) {
+          console.error('❌ Erreur lors de la suppression des anciennes conversations:', deleteError)
+        } else {
+          console.log('✅ Nettoyage automatique : conversations de plus de 15 jours supprimées')
+        }
 
         const { data: conversationsData, error } = await supabase
           .from('ai_chat_conversations')
           .select('id, created_at, updated_at')
           .eq('flynesis_user_id', flyAccount.id)
-          .gte('created_at', yesterday.toISOString())
           .order('updated_at', { ascending: false })
 
         if (error) {
@@ -163,13 +188,8 @@ export default function AIChatPage() {
 
           setConversations(conversationsWithCount)
           
-          // Si on a une conversation active, ne pas afficher la liste
-          if (conversationId) {
-            setShowConversationsList(false)
-          } else if (conversationsWithCount.length > 0) {
-            // Afficher la liste si on n'a pas de conversation active
-            setShowConversationsList(true)
-          }
+          // Ne pas ouvrir automatiquement l'historique
+          setShowConversationsList(false)
         }
       } catch (error) {
         console.error('❌ Erreur lors du chargement des conversations:', error)
@@ -233,26 +253,20 @@ export default function AIChatPage() {
     setMessages((prev) => [...prev, tempUserMessage])
 
     try {
-      // Vérifier que les véhicules sont bien chargés
-      console.log('🔍 État des véhicules avant envoi:', {
-        vehiclesState: vehicles,
-        vehiclesLength: vehicles.length,
-        vehiclesIsArray: Array.isArray(vehicles)
-      })
-      
-      if (!vehicles || vehicles.length === 0) {
-        console.error('❌ ERREUR: Aucun véhicule dans le state ! Vérifiez le chargement depuis Supabase.')
+      // Vérifier qu'un véhicule est sélectionné
+      if (!selectedVehicle) {
         toast({
-          title: "Aucun véhicule trouvé",
-          description: "Veuillez ajouter un véhicule dans votre profil.",
+          title: "Véhicule requis",
+          description: "Veuillez sélectionner un véhicule pour commencer une conversation.",
           variant: "destructive",
         })
+        setShowVehicleSelector(true)
         setIsLoading(false)
         return
       }
       
-      // Préparer les véhicules à envoyer
-      const vehiclesPayload = vehicles.map(v => ({
+      // Préparer le véhicule sélectionné à envoyer
+      const vehiclesPayload = [selectedVehicle].map(v => ({
         id: v.id,
         brand: v.brand || 'Marque inconnue',
         model: v.model || 'Modèle inconnu',
@@ -570,14 +584,20 @@ export default function AIChatPage() {
 
     if (!flyAccount) return
 
-    const yesterday = new Date()
-    yesterday.setHours(yesterday.getHours() - 24)
+    const fifteenDaysAgo = new Date()
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15)
+
+    // Supprimer automatiquement les conversations de plus de 15 jours
+    await supabase
+      .from('ai_chat_conversations')
+      .delete()
+      .eq('flynesis_user_id', flyAccount.id)
+      .lt('created_at', fifteenDaysAgo.toISOString())
 
     const { data: conversationsData } = await supabase
       .from('ai_chat_conversations')
       .select('id, created_at, updated_at')
       .eq('flynesis_user_id', flyAccount.id)
-      .gte('created_at', yesterday.toISOString())
       .order('updated_at', { ascending: false })
 
     if (conversationsData && conversationsData.length > 0) {
@@ -600,6 +620,14 @@ export default function AIChatPage() {
     } else {
       setConversations([])
     }
+  }
+
+  const deleteMessage = (messageId: string) => {
+    setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+    toast({
+      title: "Message supprimé",
+      description: "Le message a été supprimé",
+    })
   }
 
   const deleteConversation = async (convId?: string) => {
@@ -827,24 +855,24 @@ export default function AIChatPage() {
     switch (urgency) {
       case 'urgent':
         return (
-          <Badge variant="destructive" className="text-[9px] px-1.5 py-0.5">
-            <AlertCircle className="h-2.5 w-2.5 mr-1" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200/50 text-red-700 text-xs font-medium">
+            <AlertCircle className="h-3 w-3" />
             Urgent
-          </Badge>
+          </div>
         )
       case 'moderate':
         return (
-          <Badge variant="default" className="bg-yellow-500 text-white text-[9px] px-1.5 py-0.5">
-            <Clock className="h-2.5 w-2.5 mr-1" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-yellow-50 border border-yellow-200/50 text-yellow-700 text-xs font-medium">
+            <Clock className="h-3 w-3" />
             Modéré
-          </Badge>
+          </div>
         )
       case 'low':
         return (
-          <Badge variant="default" className="bg-green-500 text-white text-[9px] px-1.5 py-0.5">
-            <CheckCircle className="h-2.5 w-2.5 mr-1" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-green-50 border border-green-200/50 text-green-700 text-xs font-medium">
+            <CheckCircle className="h-3 w-3" />
             Faible
-          </Badge>
+          </div>
         )
       default:
         return null
@@ -860,216 +888,350 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pb-20">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-white/80 backdrop-blur-sm border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push("/")}
-            className="h-10 w-10 rounded-full hover:bg-gray-100 transition-all text-gray-700"
+    <div className="fixed inset-0 w-full h-full overflow-hidden bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20">
+      {/* Sélecteur de véhicule */}
+      <Dialog open={showVehicleSelector} onOpenChange={(open) => {
+        // Si on essaie de fermer et qu'aucun véhicule n'est sélectionné, retourner en arrière
+        if (!open && vehicles.length > 0 && !selectedVehicle) {
+          router.back()
+          return
+        }
+        // Si on essaie de fermer et qu'il n'y a pas de véhicules, retourner en arrière
+        if (!open && vehicles.length === 0) {
+          router.back()
+          return
+        }
+        setShowVehicleSelector(open)
+      }}>
+        <DialogContent 
+          className="sm:max-w-md relative [&>button.rounded-sm]:hidden"
+          onEscapeKeyDown={(e) => {
+            if (vehicles.length > 0 && !selectedVehicle) {
+              e.preventDefault()
+              router.back()
+            } else if (vehicles.length === 0) {
+              e.preventDefault()
+              router.back()
+            }
+          }}
+          onPointerDownOutside={(e) => {
+            if (vehicles.length > 0 && !selectedVehicle) {
+              e.preventDefault()
+              router.back()
+            } else if (vehicles.length === 0) {
+              e.preventDefault()
+              router.back()
+            }
+          }}
+        >
+          {/* Croix personnalisée */}
+          <button
+            onClick={() => {
+              if (vehicles.length > 0 && !selectedVehicle) {
+                router.back()
+              } else if (vehicles.length === 0) {
+                router.back()
+              } else {
+                setShowVehicleSelector(false)
+              }
+            }}
+            className="absolute right-4 top-4 z-50 h-8 w-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 group shadow-sm"
+            title="Fermer"
           >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex-1">
-            <h1 className="text-lg font-semibold text-gray-900">Assistant IA</h1>
-            <p className="text-xs text-gray-500">Diagnostic automobile intelligent</p>
-          </div>
-          {conversationId && (
+            <X className="h-4 w-4 text-gray-600 group-hover:text-gray-900 transition-colors" />
+          </button>
+          
+          <DialogHeader>
+            <DialogTitle className="text-xl font-medium text-gray-900">Sélectionner un véhicule</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Pour quel véhicule souhaitez-vous faire un diagnostic ?
+            </DialogDescription>
+          </DialogHeader>
+          
+          {vehicles.length === 0 ? (
+            <div className="py-8 text-center">
+              <Car className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-sm text-gray-600 mb-4">
+                Aucun véhicule trouvé dans votre profil.
+              </p>
+              <Button
+                onClick={() => router.push("/profile")}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
+              >
+                Ajouter un véhicule
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[60vh] overflow-y-auto py-2">
+              {vehicles.map((vehicle) => (
+                <motion.button
+                  key={vehicle.id}
+                  onClick={() => {
+                    setSelectedVehicle(vehicle)
+                    setShowVehicleSelector(false)
+                    toast({
+                      title: "Véhicule sélectionné",
+                      description: `${vehicle.brand} ${vehicle.model}${vehicle.year ? ` (${vehicle.year})` : ''}`,
+                    })
+                  }}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    selectedVehicle?.id === vehicle.id
+                      ? 'border-blue-500 bg-blue-50/50'
+                      : 'border-gray-200 bg-white/60 hover:border-blue-300 hover:bg-blue-50/30'
+                  }`}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`flex-shrink-0 h-10 w-10 rounded-lg flex items-center justify-center ${
+                      selectedVehicle?.id === vehicle.id
+                        ? 'bg-gradient-to-br from-blue-500 to-purple-500'
+                        : 'bg-gray-100'
+                    }`}>
+                      <Car className={`h-5 w-5 ${
+                        selectedVehicle?.id === vehicle.id ? 'text-white' : 'text-gray-600'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900">
+                        {vehicle.brand} {vehicle.model}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                        {vehicle.year && (
+                          <span className="text-xs text-gray-500">{vehicle.year}</span>
+                        )}
+                        {vehicle.license_plate && (
+                          <>
+                            {vehicle.year && <span className="text-xs text-gray-400">•</span>}
+                            <span className="text-xs text-gray-500 font-mono">{vehicle.license_plate}</span>
+                          </>
+                        )}
+                        {vehicle.fuel_type && (
+                          <>
+                            {(vehicle.year || vehicle.license_plate) && <span className="text-xs text-gray-400">•</span>}
+                            <span className="text-xs text-gray-500 capitalize">{vehicle.fuel_type}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {selectedVehicle?.id === vehicle.id && (
+                      <Check className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                    )}
+                  </div>
+                </motion.button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Sidebar pour l'historique */}
+      <AnimatePresence>
+        {showConversationsList && (
+          <>
+            {/* Overlay */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowConversationsList(false)}
+              className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+            />
+            {/* Sidebar */}
+            <motion.div
+              initial={{ x: -320 }}
+              animate={{ x: 0 }}
+              exit={{ x: -320 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed left-0 top-0 bottom-0 w-80 bg-white/90 backdrop-blur-xl border-r border-white/40 shadow-2xl z-50 flex flex-col"
+            >
+              {/* Header du sidebar */}
+              <div className="px-4 py-5 border-b border-gray-200/50">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-medium text-gray-900">Historique</h2>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setShowConversationsList(false)}
+                    className="h-8 w-8 rounded-lg hover:bg-gray-100"
+                    title="Fermer"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 font-light mb-4">
+                  Les conversations sont conservées pendant 15 jours
+                </p>
+                <Button
+                  onClick={() => {
+                    setMessages([])
+                    setConversationId(null)
+                    setSuggestedQuestions([])
+                    setShowConversationsList(false)
+                  }}
+                  className="w-full h-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nouvelle conversation
+                </Button>
+              </div>
+
+              {/* Liste des conversations */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
+                {conversations.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-sm text-gray-500">Aucune conversation récente</p>
+                  </div>
+                ) : (
+                  conversations.map((conv) => (
+                    <motion.div
+                      key={conv.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        loadConversation(conv.id)
+                        setShowConversationsList(false)
+                      }}
+                      className={`p-3 rounded-lg cursor-pointer transition-all ${
+                        conversationId === conv.id
+                          ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border-2 border-blue-400/50'
+                          : 'bg-white/60 backdrop-blur-sm border border-gray-200/50 hover:bg-white/80'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-gray-900 truncate">
+                            {new Date(conv.updated_at).toLocaleString('fr-FR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                          <p className="text-[10px] text-gray-500 mt-1">
+                            {conv.message_count} message{conv.message_count > 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        {conversationId === conv.id && (
+                          <div className="h-2 w-2 rounded-full bg-blue-600 flex-shrink-0 mt-1" />
+                        )}
+                      </div>
+                    </motion.div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer du sidebar */}
+              {conversations.length > 0 && (
+                <div className="px-4 py-4 border-t border-gray-200/50">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`Supprimer toutes les ${conversations.length} conversation(s) ?`)) {
+                        deleteAllConversations()
+                      }
+                    }}
+                    className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                    disabled={isLoading}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Tout supprimer
+                  </Button>
+                </div>
+              )}
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Contenu principal */}
+      <div className="h-full flex flex-col">
+        {/* Header */}
+        <div className="sticky top-0 z-30 bg-white/40 backdrop-blur-xl border-b border-white/20 px-4 py-4">
+          <div className="flex items-center gap-3">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => deleteConversation()}
-              className="h-8 w-8 rounded-full hover:bg-red-100 transition-all text-red-600"
-              title="Supprimer cette conversation"
+              onClick={() => router.push("/")}
+              className="h-10 w-10 rounded-full hover:bg-gray-100/80 transition-all text-gray-700"
             >
-              <X className="h-4 w-4" />
+              <ArrowLeft className="h-5 w-5" />
             </Button>
-          )}
-          {conversations.length > 0 && (
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg sm:text-xl font-light text-gray-900">Assistant IA</h1>
+              <p className="text-xs text-gray-500 font-light">
+                {selectedVehicle 
+                  ? `${selectedVehicle.brand} ${selectedVehicle.model}${selectedVehicle.year ? ` (${selectedVehicle.year})` : ''}`
+                  : "Diagnostic automobile intelligent"
+                }
+              </p>
+            </div>
+            {selectedVehicle && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowVehicleSelector(true)}
+                className="text-xs px-2 py-1 h-8 rounded-lg hover:bg-gray-100/80"
+                title="Changer de véhicule"
+              >
+                <Car className="h-3 w-3 mr-1" />
+                Changer
+              </Button>
+            )}
             <Button
               variant="ghost"
-              size="sm"
+              size="icon"
               onClick={() => setShowConversationsList(!showConversationsList)}
-              className="text-xs px-2 py-1"
+              className="h-10 w-10 rounded-lg hover:bg-gray-100/80"
+              title={showConversationsList ? "Fermer l'historique" : "Ouvrir l'historique"}
             >
-              Historique
+              <Menu className="h-5 w-5" />
             </Button>
-          )}
-          {!apiAvailable && (
-            <Badge variant="secondary" className="text-[9px] px-2 py-0.5">
-              Service indisponible
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {/* Liste des conversations */}
-      {showConversationsList && conversations.length > 0 && (
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-700">Conversations récentes (24h)</p>
-            <div className="flex items-center gap-2">
-              {isSelectionMode ? (
-                <>
-                  {selectedConversations.size > 0 && (
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={deleteSelectedConversations}
-                      className="text-xs h-6 px-2"
-                      disabled={isLoading}
-                    >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Supprimer ({selectedConversations.size})
-                    </Button>
-                  )}
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={deleteAllConversations}
-                    className="text-xs h-6 px-2"
-                    disabled={isLoading}
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />
-                    Tout supprimer
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setIsSelectionMode(false)
-                      setSelectedConversations(new Set())
-                    }}
-                    className="text-xs h-6 px-2"
-                  >
-                    Annuler
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsSelectionMode(true)}
-                    className="text-xs h-6 px-2"
-                  >
-                    <Check className="h-3 w-3 mr-1" />
-                    Sélectionner
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowConversationsList(false)}
-                    className="text-xs h-6 px-2"
-                  >
-                    Fermer
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {conversations.map((conv) => (
-              <motion.div
-                key={conv.id}
-                className={`w-full px-3 py-2 rounded-lg border transition-all ${
-                  conversationId === conv.id
-                    ? 'bg-blue-50 border-blue-300 text-blue-700'
-                    : 'bg-white border-gray-200'
-                } ${isSelectionMode ? 'cursor-pointer' : ''}`}
-                whileHover={!isSelectionMode ? { scale: 1.02 } : {}}
-                whileTap={!isSelectionMode ? { scale: 0.98 } : {}}
+            {conversationId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (confirm("Supprimer cette conversation ?")) {
+                    deleteConversation()
+                  }
+                }}
+                className="h-10 w-10 rounded-lg hover:bg-red-100/80 text-red-600"
+                title="Supprimer cette conversation"
               >
-                <div className="flex items-center gap-2">
-                  {isSelectionMode && (
-                    <div
-                      onClick={() => toggleConversationSelection(conv.id)}
-                      className={`flex-shrink-0 h-5 w-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${
-                        selectedConversations.has(conv.id)
-                          ? 'bg-blue-600 border-blue-600'
-                          : 'border-gray-300 bg-white'
-                      }`}
-                    >
-                      {selectedConversations.has(conv.id) && (
-                        <Check className="h-3 w-3 text-white" />
-                      )}
-                    </div>
-                  )}
-                  <div
-                    className={`flex-1 ${!isSelectionMode ? 'cursor-pointer' : ''}`}
-                    onClick={() => {
-                      if (!isSelectionMode) {
-                        loadConversation(conv.id)
-                      } else {
-                        toggleConversationSelection(conv.id)
-                      }
-                    }}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-xs font-medium">
-                          {new Date(conv.updated_at).toLocaleString('fr-FR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">
-                          {conv.message_count} message{conv.message_count > 1 ? 's' : ''}
-                        </p>
-                      </div>
-                      {!isSelectionMode && conversationId === conv.id && (
-                        <Badge variant="default" className="text-[9px] px-1.5 py-0.5 bg-blue-600">
-                          Actif
-                        </Badge>
-                      )}
-                      {isSelectionMode && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteConversation(conv.id)
-                          }}
-                          className="h-6 w-6 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          disabled={isLoading}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
-      )}
 
-      {/* Messages */}
-      <div className="px-4 py-6 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 pb-4">
         {messages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center py-12"
+            className="flex flex-col items-center justify-center h-full py-12 px-4"
           >
-            <Bot className="h-16 w-16 text-blue-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">
+            <div className="relative mb-6">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full blur-2xl" />
+              <div className="relative h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
+                <Bot className="h-10 w-10 text-white" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-light text-gray-900 mb-3">
               Bonjour ! 👋
             </h2>
-            <p className="text-sm text-gray-600 mb-6 max-w-md mx-auto">
+            <p className="text-sm text-gray-600 mb-8 max-w-md mx-auto text-center font-light">
               Décrivez votre problème automobile et je vais vous aider à identifier les causes probables, 
               le niveau d'urgence et vous recommander le service approprié.
             </p>
             
             {/* Propositions de premiers messages */}
-            <div className="space-y-3 max-w-md mx-auto mt-8">
-              <p className="text-xs text-gray-500 font-medium mb-3">Ou commencez par choisir un problème :</p>
-              <div className="grid grid-cols-1 gap-2">
+            <div className="space-y-4 max-w-2xl w-full mx-auto">
+              <p className="text-xs text-gray-500 font-light mb-4 text-center">Ou commencez par choisir un problème :</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                   "J'ai un bruit au freinage",
                   "Un voyant s'allume sur mon tableau de bord",
@@ -1094,13 +1256,14 @@ export default function AIChatPage() {
                         waitCount++
                       }
                       
-                      // Vérifier que les véhicules sont bien chargés après l'attente
-                      if (!vehicles || vehicles.length === 0) {
+                      // Vérifier qu'un véhicule est sélectionné
+                      if (!selectedVehicle) {
                         toast({
-                          title: "Aucun véhicule trouvé",
-                          description: "Veuillez ajouter un véhicule dans votre profil avant de commencer une conversation.",
+                          title: "Véhicule requis",
+                          description: "Veuillez sélectionner un véhicule pour commencer une conversation.",
                           variant: "destructive",
                         })
+                        setShowVehicleSelector(true)
                         return
                       }
                       
@@ -1119,8 +1282,8 @@ export default function AIChatPage() {
                       
                       try {
                         
-                        // Préparer les véhicules à envoyer
-                        const vehiclesPayload = vehicles.map(v => ({
+                        // Préparer le véhicule sélectionné à envoyer
+                        const vehiclesPayload = [selectedVehicle].map(v => ({
                           id: v.id,
                           brand: v.brand || 'Marque inconnue',
                           model: v.model || 'Modèle inconnu',
@@ -1297,7 +1460,7 @@ export default function AIChatPage() {
                         setIsLoading(false)
                       }
                     }}
-                    className="text-left text-xs px-4 py-3 bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg transition-all text-gray-700 shadow-sm hover:shadow-md"
+                    className="text-left text-xs px-4 py-3 bg-white/60 backdrop-blur-sm hover:bg-white/80 border border-gray-200/50 hover:border-blue-300/50 rounded-lg transition-all text-gray-700 shadow-sm hover:shadow-md font-light"
                     whileHover={{ scale: 1.02, y: -2 }}
                     whileTap={{ scale: 0.98 }}
                   >
@@ -1315,33 +1478,48 @@ export default function AIChatPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'} items-start group`}
               >
                 {message.role === 'assistant' && (
-                  <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-white" />
+                  <div className="flex-shrink-0 h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md">
+                    <Bot className="h-5 w-5 text-white" />
                   </div>
                 )}
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                    message.role === 'user'
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white'
-                      : 'bg-white border border-gray-200 text-gray-900 shadow-sm'
-                  }`}
-                >
-                  <div className="text-sm whitespace-pre-wrap">{message.content}</div>
+                <div className="relative max-w-[85%] sm:max-w-[75%]">
+                  <div
+                    className={`rounded-lg px-4 py-3 ${
+                      message.role === 'user'
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
+                        : 'bg-white/60 backdrop-blur-sm border border-white/40 text-gray-900 shadow-sm'
+                    }`}
+                  >
+                    <div className="text-sm whitespace-pre-wrap font-light leading-relaxed">{message.content}</div>
+                    
+                    {/* Bouton de suppression - visible uniquement au survol */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (confirm("Supprimer ce message ?")) {
+                          deleteMessage(message.id)
+                        }
+                      }}
+                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 hover:bg-red-600 active:bg-red-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10 touch-manipulation"
+                      title="Supprimer ce message"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   
                   {/* Analyse IA (uniquement si ce n'est pas une salutation) */}
                   {message.role === 'assistant' && message.ai_analysis && !(message.ai_analysis as any)?.is_greeting && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                    <div className="mt-4 pt-4 border-t border-gray-200/50 space-y-3">
                       {/* Causes probables */}
                       {message.ai_analysis.causes && message.ai_analysis.causes.length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold text-gray-700 mb-1.5">Causes probables :</p>
-                          <ul className="text-xs text-gray-600 space-y-1">
+                        <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100/50">
+                          <p className="text-xs font-medium text-gray-700 mb-2">Causes probables :</p>
+                          <ul className="text-xs text-gray-600 space-y-1.5 font-light">
                             {message.ai_analysis.causes.map((cause, index) => (
                               <li key={index} className="flex items-start gap-2">
-                                <span className="text-blue-500 mt-0.5">•</span>
+                                <span className="text-blue-500 mt-0.5 flex-shrink-0">•</span>
                                 <span>{cause}</span>
                               </li>
                             ))}
@@ -1351,15 +1529,13 @@ export default function AIChatPage() {
 
                       {/* Urgence et service recommandé */}
                       {((message.ai_analysis as any)?.diagnostic_complete || message.ai_analysis.urgency) && (
-                        <div className="flex items-center justify-between gap-2 pt-2">
-                          <div className="flex items-center gap-2">
-                            {message.ai_analysis.urgency && getUrgencyBadge(message.ai_analysis.urgency)}
-                            {message.ai_analysis.recommended_service && (
-                              <span className="text-xs text-gray-600">
-                                Service : <span className="font-semibold">{message.ai_analysis.recommended_service}</span>
-                              </span>
-                            )}
-                          </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {message.ai_analysis.urgency && getUrgencyBadge(message.ai_analysis.urgency)}
+                          {message.ai_analysis.recommended_service && (
+                            <span className="text-xs text-gray-600 font-light">
+                              Service : <span className="font-medium text-gray-900">{message.ai_analysis.recommended_service}</span>
+                            </span>
+                          )}
                         </div>
                       )}
 
@@ -1367,11 +1543,11 @@ export default function AIChatPage() {
                       {message.ai_analysis.recommended_service && (message.ai_analysis as any)?.diagnostic_complete && (
                         <>
                           {/* Message d'avertissement */}
-                          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <div className="p-3 bg-red-50/80 backdrop-blur-sm border border-red-200/50 rounded-lg">
                             <div className="flex items-start gap-2">
                               <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-                              <p className="text-xs text-red-700 leading-relaxed">
-                                <span className="font-semibold">⚠️ Avertissement :</span> Ce diagnostic est fourni par une intelligence artificielle à titre indicatif uniquement. Il ne remplace pas l'expertise d'un professionnel. Veuillez consulter un mécanicien qualifié lors de votre rendez-vous pour un diagnostic précis et une réparation appropriée.
+                              <p className="text-xs text-red-700 leading-relaxed font-light">
+                                <span className="font-medium">⚠️ Avertissement :</span> Ce diagnostic est fourni par une intelligence artificielle à titre indicatif uniquement. Il ne remplace pas l'expertise d'un professionnel. Veuillez consulter un mécanicien qualifié lors de votre rendez-vous pour un diagnostic précis et une réparation appropriée.
                               </p>
                             </div>
                           </div>
@@ -1379,7 +1555,7 @@ export default function AIChatPage() {
                           {/* Bouton de réservation */}
                           <motion.button
                             onClick={() => handleReservation(message.ai_analysis)}
-                            className="w-full mt-3 py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:shadow-md transition-all"
+                            className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:shadow-md transition-all"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >
@@ -1393,13 +1569,13 @@ export default function AIChatPage() {
 
                   {/* Questions suggérées avec options */}
                   {message.role === 'assistant' && (message.ai_analysis as any)?.needs_more_info && suggestedQuestions.length > 0 && message.id === messages[messages.length - 1]?.id && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-4">
+                    <div className="mt-4 pt-4 border-t border-gray-200/50 space-y-4">
                       {suggestedQuestions.map((qObj, qIndex) => (
-                        <div key={qIndex} className="space-y-2">
-                          <p className="text-xs font-semibold text-gray-700">
+                        <div key={qIndex} className="space-y-2.5">
+                          <p className="text-xs font-medium text-gray-700">
                             {qObj.question}
                             {selectedAnswers.has(qIndex) && (
-                              <span className="ml-2 text-green-600 text-[10px]">✓ Sélectionné</span>
+                              <span className="ml-2 text-green-600 text-[10px] font-light">✓ Sélectionné</span>
                             )}
                           </p>
                           {qObj.options && qObj.options.length > 0 ? (
@@ -1419,10 +1595,10 @@ export default function AIChatPage() {
                                       }
                                       setSelectedAnswers(newSelectedAnswers)
                                     }}
-                                    className={`text-xs px-3 py-1.5 border rounded-lg transition-colors font-medium ${
+                                    className={`text-xs px-3 py-1.5 border rounded-lg transition-all font-light ${
                                       isSelected
-                                        ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700'
-                                        : 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700'
+                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white border-transparent shadow-sm'
+                                        : 'bg-white/60 backdrop-blur-sm hover:bg-white/80 border-gray-200/50 text-gray-700'
                                     }`}
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
@@ -1439,7 +1615,7 @@ export default function AIChatPage() {
                       {/* Message d'information */}
                       {suggestedQuestions.length > 0 && selectedAnswers.size === 0 && (
                         <div className="pt-2">
-                          <p className="text-xs text-gray-500 italic">
+                          <p className="text-xs text-gray-500 italic font-light">
                             💡 Sélectionnez une option pour chaque question, puis cliquez sur "Envoyer toutes les réponses"
                           </p>
                         </div>
@@ -1447,7 +1623,7 @@ export default function AIChatPage() {
                       
                       {/* Bouton pour envoyer toutes les réponses */}
                       {selectedAnswers.size > 0 && (
-                        <div className="pt-3 border-t border-gray-200">
+                        <div className="pt-3 border-t border-gray-200/50">
                           <motion.button
                             onClick={async () => {
                               if (!user || isLoading || selectedAnswers.size === 0) return
@@ -1483,19 +1659,20 @@ export default function AIChatPage() {
                               // setSuggestedQuestions([])
                               
                               try {
-                                // Vérifier que les véhicules sont bien chargés
-                                if (!vehicles || vehicles.length === 0) {
+                                // Vérifier qu'un véhicule est sélectionné
+                                if (!selectedVehicle) {
                                   toast({
-                                    title: "Aucun véhicule trouvé",
-                                    description: "Veuillez ajouter un véhicule dans votre profil.",
+                                    title: "Véhicule requis",
+                                    description: "Veuillez sélectionner un véhicule pour continuer.",
                                     variant: "destructive",
                                   })
+                                  setShowVehicleSelector(true)
                                   setIsLoading(false)
                                   return
                                 }
                                 
-                                // Préparer les véhicules à envoyer
-                                const vehiclesPayload = vehicles.map(v => ({
+                                // Préparer le véhicule sélectionné à envoyer
+                                const vehiclesPayload = [selectedVehicle].map(v => ({
                                   id: v.id,
                                   brand: v.brand || 'Marque inconnue',
                                   model: v.model || 'Modèle inconnu',
@@ -1633,21 +1810,22 @@ export default function AIChatPage() {
                               }
                             }}
                             disabled={isLoading}
-                            className="w-full mt-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-semibold text-sm shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full px-4 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-medium text-sm shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >
-                            <Send className="h-4 w-4 inline mr-2" />
+                            <Send className="h-4 w-4" />
                             Envoyer toutes les réponses ({selectedAnswers.size}/{suggestedQuestions.length})
                           </motion.button>
                         </div>
                       )}
                     </div>
                   )}
+                  </div>
                 </div>
                 {message.role === 'user' && (
-                  <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                    <User className="h-4 w-4 text-gray-600" />
+                  <div className="flex-shrink-0 h-9 w-9 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center shadow-md">
+                    <User className="h-5 w-5 text-gray-600" />
                   </div>
                 )}
               </motion.div>
@@ -1658,52 +1836,53 @@ export default function AIChatPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex gap-3 justify-start"
+            className="flex gap-3 justify-start items-start"
           >
-            <div className="flex-shrink-0 h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center">
-              <Bot className="h-4 w-4 text-white" />
+            <div className="flex-shrink-0 h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md">
+              <Bot className="h-5 w-5 text-white" />
             </div>
-            <div className="bg-white border border-gray-200 rounded-2xl px-4 py-3 shadow-sm">
-              <div className="flex gap-1">
-                <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="h-2 w-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            <div className="bg-white/60 backdrop-blur-sm border border-white/40 rounded-lg px-4 py-3 shadow-sm">
+              <div className="flex gap-1.5">
+                <div className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="h-2 w-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
               </div>
             </div>
           </motion.div>
         )}
         <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input */}
-      <div className="fixed bottom-20 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 px-4 py-3">
-        <div className="flex gap-2 items-end">
-          <Input
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                sendMessage()
-              }
-            }}
-            placeholder="Décrivez votre problème..."
-            disabled={isLoading}
-            className="flex-1 min-h-[44px] text-sm"
-          />
-          <Button
-            onClick={() => sendMessage()}
-            disabled={!inputMessage.trim() || isLoading}
-            className="h-[44px] w-[44px] rounded-full bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transition-all"
-          >
-            <Send className="h-4 w-4 text-white" />
-          </Button>
         </div>
-        {!apiAvailable && (
-          <p className="text-xs text-gray-500 mt-2 text-center">
-            Le service de diagnostic IA est momentanément indisponible
-          </p>
-        )}
+
+        {/* Input */}
+        <div className="sticky bottom-0 bg-white/40 backdrop-blur-xl border-t border-white/20 px-4 py-4 pb-20 sm:pb-24 z-50">
+          <div className="flex gap-2 items-end">
+            <Input
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  sendMessage()
+                }
+              }}
+              placeholder="Décrivez votre problème..."
+              disabled={isLoading}
+              className="flex-1 min-h-[44px] text-sm bg-white/60 backdrop-blur-sm border-white/40 rounded-lg"
+            />
+            <Button
+              onClick={() => sendMessage()}
+              disabled={!inputMessage.trim() || isLoading}
+              className="h-[44px] w-[44px] rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all flex-shrink-0"
+            >
+              <Send className="h-4 w-4 text-white" />
+            </Button>
+          </div>
+          {!apiAvailable && (
+            <p className="text-xs text-gray-500 mt-2 text-center font-light">
+              Le service de diagnostic IA est momentanément indisponible
+            </p>
+          )}
+        </div>
       </div>
 
       <BottomNavigation />

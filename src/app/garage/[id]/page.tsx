@@ -446,9 +446,9 @@ export default function GarageDetailPage() {
         >
           <Button
             onClick={() => router.push(`/reservation?garage=${garage.id}`)}
-            className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-2xl font-light text-base shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-3"
+            className="w-full h-10 sm:h-11 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-medium text-sm sm:text-base shadow-md hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-3"
           >
-            <Calendar className="h-5 w-5" />
+            <Calendar className="h-4 w-4 sm:h-5 sm:w-5" />
             Réserver un rendez-vous
           </Button>
         </motion.div>
