@@ -948,7 +948,7 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="fixed inset-0 w-full h-screen bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 flex flex-col">
+    <div className="fixed inset-0 w-full h-screen bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 flex flex-col pb-20 sm:pb-24">
       {/* Sélecteur de véhicule */}
       <Dialog open={showVehicleSelector} onOpenChange={(open) => {
         // Si on essaie de fermer et qu'aucun véhicule n'est sélectionné, retourner en arrière
@@ -1104,7 +1104,7 @@ export default function AIChatPage() {
               animate={{ x: 0 }}
               exit={{ x: 320 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 bottom-0 w-80 bg-white/90 backdrop-blur-xl border-l border-white/40 shadow-2xl z-50 flex flex-col pb-24"
+              className="fixed right-0 top-0 bottom-0 w-80 bg-white/90 backdrop-blur-xl border-l border-white/40 shadow-2xl z-50 flex flex-col pb-24 sm:pb-28"
             >
               {/* Header du sidebar */}
               <div className="px-4 py-5 border-b border-gray-200/50">
@@ -1292,7 +1292,7 @@ export default function AIChatPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-6 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-6 pb-24 sm:pb-28" style={{ WebkitOverflowScrolling: 'touch' }}>
         {messages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1970,7 +1970,7 @@ export default function AIChatPage() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 100, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="flex-shrink-0 bg-white/40 backdrop-blur-xl border-t border-white/20 px-4 py-4 pb-20 sm:pb-24 z-[60] relative"
+              className="flex-shrink-0 bg-white/40 backdrop-blur-xl border-t border-white/20 px-4 py-4 pb-24 sm:pb-28 z-[60] relative"
             >
               <div className="flex gap-2 items-end">
                 <Input

@@ -24,7 +24,7 @@ export function BottomNavigation() {
   }
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 shadow-lg z-50 safe-area-bottom">
+    <div className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-md border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 shadow-lg z-50" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
       <div className="flex items-center justify-around max-w-[428px] mx-auto perfect-between">
         {navItems.map((item, index) => {
           const Icon = item.icon
