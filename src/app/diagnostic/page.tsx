@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Upload, X, Camera, Video, FileText, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,16 +13,25 @@ import { useToast } from "@/components/ui/use-toast"
 
 export default function DiagnosticPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const [description, setDescription] = useState("")
   const [photos, setPhotos] = useState<File[]>([])
   const [videos, setVideos] = useState<File[]>([])
   const [loading, setLoading] = useState(false)
 
-  if (!user) {
-    router.push("/login")
-    return null
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login")
+    }
+  }, [user, authLoading, router])
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-gray-500">Chargement...</div>
+      </div>
+    )
   }
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

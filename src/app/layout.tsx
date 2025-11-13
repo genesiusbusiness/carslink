@@ -4,7 +4,12 @@ import "./globals.css"
 import { Toaster } from "@/components/ui/toaster"
 import { RadixClassNameFix } from "@/components/fix/RadixClassNameFix"
 
-const inter = Inter({ subsets: ["latin"] })
+const inter = Inter({ 
+  subsets: ["latin"],
+  display: 'swap',
+  preload: true,
+  adjustFontFallback: true,
+})
 
 export const metadata: Metadata = {
   title: "CarsLink - Votre garage de confiance",

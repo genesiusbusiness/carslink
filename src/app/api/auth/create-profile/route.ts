@@ -4,16 +4,21 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js"
 import { randomUUID } from "crypto"
 
 // Configuration Supabase pour le client admin (côté serveur uniquement)
-const supabaseUrl = 'https://yxkbvhymsvasknslhpsa.supabase.co'
-const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4a2J2aHltc3Zhc2tuc2xocHNhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY3MjUyNCwiZXhwIjoyMDc3MjQ4NTI0fQ.kn1G0sBMZ0beUbHE3fo1eUv0ZygPAt6adrghVXw9Nac'
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://yxkbvhymsvasknslhpsa.supabase.co'
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Client admin pour les opérations côté serveur
-const supabaseAdmin = createSupabaseClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-})
+  if (!supabaseServiceRoleKey) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set in environment variables')
+  }
+
+  return createSupabaseClient(supabaseUrl, supabaseServiceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,6 +30,7 @@ export async function POST(request: NextRequest) {
     let user
     if (userId) {
       // Utiliser le client admin pour obtenir les infos de l'utilisateur
+      const supabaseAdmin = getSupabaseAdmin()
       const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId)
       if (authError || !authUser.user) {
         return NextResponse.json(
@@ -51,6 +57,7 @@ export async function POST(request: NextRequest) {
     await new Promise(resolve => setTimeout(resolve, 1000))
 
     // Vérifier si le compte fly_accounts existe déjà (créé par le trigger)
+    const supabaseAdmin = getSupabaseAdmin()
     let flyAccountResult = await supabaseAdmin
       .from('fly_accounts')
       .select('id')
@@ -93,6 +100,7 @@ export async function POST(request: NextRequest) {
         try {
           // Utiliser la fonction SQL create_fly_account_safe pour insérer avec les triggers désactivés
           
+          const supabaseAdmin = getSupabaseAdmin()
           const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('create_fly_account_safe', {
             p_id: accountId,
             p_auth_user_id: user.id,
@@ -185,6 +193,7 @@ export async function POST(request: NextRequest) {
       
       // Essayer d'abord avec la fonction RPC si elle existe
       try {
+        const supabaseAdmin = getSupabaseAdmin()
         const { data: rpcData, error: rpcError } = await supabaseAdmin.rpc('link_flynesis_to_carslink', {
           p_flynesis_id: flyAccountId,
           p_role: 'client'

@@ -856,12 +856,14 @@ export default function HomePage() {
                   placeholder="Rechercher un service ou garage..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  onFocus={() => {
+                  onFocus={(e) => {
+                    // Empêcher le zoom automatique sur mobile
+                    e.target.style.fontSize = '16px'
                     if (searchQuery.length >= 2) {
                       setShowSearchResults(true)
                     }
                   }}
-                  className="relative pl-11 sm:pl-12 pr-4 h-11 sm:h-12 rounded-xl border-2 border-gray-300/80 bg-white/90 backdrop-blur-md font-light text-sm sm:text-base shadow-lg focus:shadow-xl focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-200/50 transition-all duration-300"
+                  className="relative pl-11 sm:pl-12 pr-4 h-11 sm:h-12 rounded-xl border-2 border-gray-300/80 bg-white/90 backdrop-blur-md font-light text-base shadow-lg focus:shadow-xl focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-200/50 transition-all duration-300"
                 />
               </div>
             </motion.div>

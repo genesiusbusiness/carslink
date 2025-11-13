@@ -455,7 +455,11 @@ function SearchPageContent() {
                 placeholder="Rechercher un garage..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 sm:pl-12 h-11 sm:h-12 text-sm sm:text-base rounded-xl"
+                onFocus={(e) => {
+                  // Empêcher le zoom automatique sur mobile
+                  e.target.style.fontSize = '16px'
+                }}
+                className="pl-10 sm:pl-12 h-11 sm:h-12 text-base rounded-xl"
               />
             </div>
           </div>

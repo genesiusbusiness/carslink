@@ -1,14 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Utiliser les variables d'environnement AWS Amplify, avec fallback pour le développement local
-// Supporte aussi OPENROUTER_BASE_UR (sans L) pour compatibilité avec AWS configuré
-const AI_API_KEY = process.env.OPENROUTER_API_KEY || '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'
+// ⚠️ SÉCURITÉ: Utiliser UNIQUEMENT les variables d'environnement
+// La clé API DOIT être configurée dans les variables d'environnement
+// ⚠️ NE JAMAIS hardcoder la clé API dans le code source
+const AI_API_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || undefined
 const AI_API_BASE_URL = process.env.OPENROUTER_BASE_URL || process.env.OPENROUTER_BASE_UR || 'https://openrouter.ai/api/v1'
 const AI_API_URL = `${AI_API_BASE_URL}/chat/completions`
 const OPENROUTER_REFERER = process.env.OPENROUTER_REFERER || process.env.OPENROUTER_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://main.dsnxou1bmazo1.amplifyapp.com'
 
 export async function GET(request: NextRequest) {
   try {
+    // Vérifier que la clé API est configurée
+    if (!AI_API_KEY) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            message: "OPENROUTER_API_KEY is not configured. Please set it in environment variables (AWS Amplify or .env.local)",
+          },
+        },
+        { status: 500 }
+      )
+    }
+    
     console.log('🔍 Test OpenRouter - Début')
     
     // Test 1: Test de connectivité simple

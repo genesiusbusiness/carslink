@@ -3,11 +3,14 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { ArrowLeft, Send, Bot, User, AlertCircle, Clock, CheckCircle, Calendar, X, Check, Trash2, Menu, Plus, Car } from "lucide-react"
+import { ArrowLeft, Send, Bot, User, AlertCircle, Clock, CheckCircle, Calendar, X, Check, Trash2, Menu, Plus, Car, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type { ModelId } from "@/lib/openrouter"
+import { FREE_MODELS } from "@/lib/openrouter"
 import { BottomNavigation } from "@/components/layout/BottomNavigation"
 import { useAuth } from "@/lib/hooks/use-auth"
 import { supabase } from "@/lib/supabase/client"
@@ -33,6 +36,7 @@ export default function AIChatPage() {
   const [selectedConversations, setSelectedConversations] = useState<Set<string>>(new Set())
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedAnswers, setSelectedAnswers] = useState<Map<number, string>>(new Map())
+  const [selectedModel, setSelectedModel] = useState<ModelId | undefined>(undefined) // undefined = utiliser le modèle par défaut
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastMessageRef = useRef<string>("")
@@ -239,6 +243,30 @@ export default function AIChatPage() {
     if (!user || isLoading) return
 
     const userMessage = message.trim()
+    
+    // Vérifier qu'un véhicule est sélectionné AVANT d'ajouter le message
+    if (!selectedVehicle) {
+      // Si aucun véhicule n'est disponible, permettre quand même l'envoi
+      if (vehicles.length === 0) {
+        toast({
+          title: "Aucun véhicule",
+          description: "Vous pouvez quand même poser une question, mais le diagnostic sera plus général.",
+          variant: "default",
+        })
+        // Continuer sans véhicule - on va ajouter le message et envoyer
+      } else {
+        // Si des véhicules existent mais aucun n'est sélectionné, ouvrir le sélecteur
+        toast({
+          title: "Véhicule requis",
+          description: "Veuillez sélectionner un véhicule pour commencer une conversation.",
+          variant: "destructive",
+        })
+        setShowVehicleSelector(true)
+        // Ne pas vider l'input, garder le message
+        return
+      }
+    }
+
     setInputMessage("")
     setIsLoading(true)
 
@@ -253,27 +281,16 @@ export default function AIChatPage() {
     setMessages((prev) => [...prev, tempUserMessage])
 
     try {
-      // Vérifier qu'un véhicule est sélectionné
-      if (!selectedVehicle) {
-        toast({
-          title: "Véhicule requis",
-          description: "Veuillez sélectionner un véhicule pour commencer une conversation.",
-          variant: "destructive",
-        })
-        setShowVehicleSelector(true)
-        setIsLoading(false)
-        return
-      }
       
-      // Préparer le véhicule sélectionné à envoyer
-      const vehiclesPayload = [selectedVehicle].map(v => ({
+      // Préparer le véhicule sélectionné à envoyer (ou un tableau vide si aucun véhicule)
+      const vehiclesPayload = selectedVehicle ? [selectedVehicle].map(v => ({
         id: v.id,
         brand: v.brand || 'Marque inconnue',
         model: v.model || 'Modèle inconnu',
         license_plate: v.license_plate || null,
         year: v.year || null,
         fuel_type: v.fuel_type || null,
-      }))
+      })) : []
       
       console.log('📤 Envoi des véhicules RÉELS à l\'API:', vehiclesPayload.length, 'véhicule(s)')
       vehiclesPayload.forEach((v, i) => {
@@ -292,6 +309,7 @@ export default function AIChatPage() {
           message: userMessage,
           userId: user.id,
           vehicles: vehiclesPayload,
+          model: selectedModel, // Passer le modèle sélectionné
           profile: profile ? {
             first_name: profile.first_name,
             last_name: profile.last_name,
@@ -360,8 +378,9 @@ export default function AIChatPage() {
       }
 
       // Vérifier si la réponse contient une erreur ou un message d'indisponibilité
-      // MAIS afficher quand même la réponse si elle existe
-      if (data.message && data.message.content && data.message.content.includes('temporairement indisponible')) {
+      const isErrorResponse = data.message && data.message.content && data.message.content.includes('temporairement indisponible')
+      
+      if (isErrorResponse) {
         console.error('⚠️ Message d\'indisponibilité détecté dans la réponse:', data.message.content)
         console.error('⚠️ Analyse reçue:', data.analysis)
         console.error('⚠️ Message complet:', data.message)
@@ -380,23 +399,52 @@ export default function AIChatPage() {
         if (data.warnings && Array.isArray(data.warnings) && data.warnings.includes('OPENROUTER_AUTH')) {
           try {
             toast({
-              title: "Erreur d'authentification OpenRouter",
-              description: "La clé API OpenRouter n'est pas valide. Vérifiez la configuration.",
-              variant: "destructive",
+              title: "Avertissement",
+              description: "Erreur d'authentification OpenRouter détectée. La réponse peut être limitée.",
+              variant: "default",
             })
           } catch (toastError: any) {
             console.error('❌ Erreur lors de l\'affichage du toast:', toastError)
           }
         }
+        
+        // Créer un message d'erreur plus informatif au lieu d'utiliser le message générique
+        let errorContent = 'Le service CarsLink Assistant est temporairement indisponible. Réessayez plus tard.'
+        
+        if (data.error_details?.message) {
+          if (data.error_details.message.includes('401') || data.error_details.message.includes('403')) {
+            errorContent = '⚠️ Erreur d\'authentification avec le service IA. Veuillez contacter le support.'
+          } else if (data.error_details.message.includes('429') || data.error_details.message.includes('rate limit')) {
+            errorContent = '⚠️ Le service est temporairement surchargé. Veuillez réessayer dans quelques instants.'
+          } else if (data.error_details.message.includes('timeout')) {
+            errorContent = '⚠️ La requête a pris trop de temps. Veuillez réessayer.'
+          }
+        }
+        
+        const errorMessage: AIChatMessage = {
+          id: data.message.id || `error-${Date.now()}`,
+          conversation_id: conversationId || '',
+          role: 'assistant',
+          content: errorContent,
+          created_at: data.message.created_at || new Date().toISOString(),
+          ai_analysis: data.analysis,
+        }
+        
+        // Remplacer le message temporaire par le message réel de l'utilisateur et ajouter le message d'erreur
+        setMessages((prev) => {
+          const filtered = prev.filter((msg) => msg.id !== tempUserMessage.id)
+          const userMsg = data.userMessage ? data.userMessage : tempUserMessage
+          return [...filtered, userMsg, errorMessage]
+        })
+      } else {
+        // Remplacer le message temporaire par le message réel de l'utilisateur et ajouter le message de l'assistant
+        setMessages((prev) => {
+          const filtered = prev.filter((msg) => msg.id !== tempUserMessage.id)
+          // Ajouter le message de l'utilisateur réel si disponible (depuis la base de données)
+          const userMsg = data.userMessage ? data.userMessage : tempUserMessage
+          return [...filtered, userMsg, data.message]
+        })
       }
-      
-      // Remplacer le message temporaire par le message réel de l'utilisateur et ajouter le message de l'assistant
-      setMessages((prev) => {
-        const filtered = prev.filter((msg) => msg.id !== tempUserMessage.id)
-        // Ajouter le message de l'utilisateur réel si disponible (depuis la base de données)
-        const userMsg = data.userMessage ? data.userMessage : tempUserMessage
-        return [...filtered, userMsg, data.message]
-      })
 
       // Stocker les questions suggérées pour affichage
       console.log('📥 Questions suggérées reçues de l\'API:', data.suggestedQuestions)
@@ -485,7 +533,9 @@ export default function AIChatPage() {
       // Afficher un message d'erreur
       let errorContent = 'Une erreur est survenue. Veuillez réessayer.'
       
-      if (error.message?.includes('API key')) {
+      if (error.message?.includes('RATE_LIMIT') || error.message?.includes('429')) {
+        errorContent = '⚠️ Les services IA sont temporairement surchargés. Tous les modèles gratuits ont atteint leur limite de requêtes. Veuillez réessayer dans quelques minutes.'
+      } else if (error.message?.includes('API key')) {
         errorContent = 'Le service de diagnostic IA est momentanément indisponible. Veuillez réessayer plus tard ou contacter directement un garage.'
       } else if (error.message?.includes('Configuration serveur')) {
         errorContent = '⚠️ Configuration serveur manquante. Veuillez contacter le support technique.'
@@ -520,7 +570,7 @@ export default function AIChatPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [user, isLoading, conversationId, vehicles, profile, toast])
+  }, [user, isLoading, conversationId, vehicles, profile, toast, selectedVehicle, inputMessage, router])
 
   const loadConversation = async (convId: string) => {
     if (!user) return
@@ -528,13 +578,18 @@ export default function AIChatPage() {
     try {
       setIsLoading(true)
       
-      const response = await fetch(`/api/ai-chat?conversationId=${convId}&userId=${user.id}`)
-      
-      if (!response.ok) {
+      // Charger les messages depuis Supabase directement
+      const { data: messagesData, error: messagesError } = await supabase
+        .from('ai_chat_messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true })
+
+      if (messagesError) {
         throw new Error('Erreur lors du chargement de la conversation')
       }
 
-      const data = await response.json()
+      const data = { messages: messagesData || [] }
       
       if (data.messages && data.messages.length > 0) {
         setMessages(data.messages)
@@ -649,7 +704,8 @@ export default function AIChatPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Erreur lors de la suppression de la conversation')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Erreur lors de la suppression de la conversation')
       }
 
       // Si c'est la conversation active, réinitialiser l'état
@@ -670,7 +726,7 @@ export default function AIChatPage() {
       console.error('❌ Erreur lors de la suppression:', error)
       toast({
         title: "Erreur",
-        description: "Impossible de supprimer la conversation",
+        description: error instanceof Error ? error.message : "Impossible de supprimer la conversation",
         variant: "destructive",
       })
     } finally {
@@ -684,8 +740,10 @@ export default function AIChatPage() {
     try {
       setIsLoading(true)
 
-      // Supprimer toutes les conversations sélectionnées
-      const deletePromises = Array.from(selectedConversations).map(convId => 
+      const conversationIds = Array.from(selectedConversations)
+
+      // Supprimer chaque conversation via l'API
+      const deletePromises = conversationIds.map(convId =>
         fetch('/api/ai-chat', {
           method: 'DELETE',
           headers: {
@@ -747,15 +805,17 @@ export default function AIChatPage() {
     try {
       setIsLoading(true)
 
-      // Supprimer toutes les conversations
-      const deletePromises = conversations.map(conv => 
+      const conversationIds = conversations.map(conv => conv.id)
+
+      // Supprimer chaque conversation via l'API
+      const deletePromises = conversationIds.map(convId =>
         fetch('/api/ai-chat', {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            conversationId: conv.id,
+            conversationId: convId,
             userId: user.id,
           }),
         })
@@ -888,7 +948,7 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="fixed inset-0 w-full h-full overflow-hidden bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20">
+    <div className="fixed inset-0 w-full h-screen bg-gradient-to-br from-blue-50/40 via-white to-purple-50/20 flex flex-col">
       {/* Sélecteur de véhicule */}
       <Dialog open={showVehicleSelector} onOpenChange={(open) => {
         // Si on essaie de fermer et qu'aucun véhicule n'est sélectionné, retourner en arrière
@@ -1036,14 +1096,15 @@ export default function AIChatPage() {
               exit={{ opacity: 0 }}
               onClick={() => setShowConversationsList(false)}
               className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+              style={{ pointerEvents: showConversationsList ? 'auto' : 'none' }}
             />
             {/* Sidebar */}
             <motion.div
-              initial={{ x: -320 }}
+              initial={{ x: 320 }}
               animate={{ x: 0 }}
-              exit={{ x: -320 }}
+              exit={{ x: 320 }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed left-0 top-0 bottom-0 w-80 bg-white/90 backdrop-blur-xl border-r border-white/40 shadow-2xl z-50 flex flex-col"
+              className="fixed right-0 top-0 bottom-0 w-80 bg-white/90 backdrop-blur-xl border-l border-white/40 shadow-2xl z-50 flex flex-col pb-24"
             >
               {/* Header du sidebar */}
               <div className="px-4 py-5 border-b border-gray-200/50">
@@ -1121,6 +1182,45 @@ export default function AIChatPage() {
                 )}
               </div>
 
+              {/* Section Paramètres */}
+              <div className="px-4 py-4 border-t border-gray-200/50">
+                <div className="flex items-center gap-2 mb-3">
+                  <Settings className="h-4 w-4 text-gray-600" />
+                  <h3 className="text-sm font-medium text-gray-900">Paramètres</h3>
+                </div>
+                <div className="space-y-3">
+                  {/* Sélecteur de modèle IA */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-700 mb-2 block">
+                      Modèle IA
+                    </label>
+                    <Select value={selectedModel || "default"} onValueChange={(value) => setSelectedModel(value === "default" ? undefined : value as ModelId)}>
+                      <SelectTrigger className="h-10 w-full text-sm border-gray-200/50 bg-white/60 backdrop-blur-sm">
+                        <SelectValue placeholder="Modèle">
+                          {selectedModel 
+                            ? selectedModel.split('/')[1]?.split(':')[0] || selectedModel.split('/')[0]
+                            : "Par défaut (auto)"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Par défaut (auto)</SelectItem>
+                        {FREE_MODELS.map((model) => {
+                          const displayName = model.split('/')[1]?.split(':')[0] || model.split('/')[0];
+                          return (
+                            <SelectItem key={model} value={model}>
+                              {displayName}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      Le système basculera automatiquement si le modèle sélectionné n'est pas disponible
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Footer du sidebar */}
               {conversations.length > 0 && (
                 <div className="px-4 py-4 border-t border-gray-200/50">
@@ -1146,9 +1246,9 @@ export default function AIChatPage() {
       </AnimatePresence>
 
       {/* Contenu principal */}
-      <div className="h-full flex flex-col">
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Header */}
-        <div className="sticky top-0 z-30 bg-white/40 backdrop-blur-xl border-b border-white/20 px-4 py-4">
+        <div className="flex-shrink-0 z-30 bg-white/40 backdrop-blur-xl border-b border-white/20 px-4 py-4">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -1188,26 +1288,11 @@ export default function AIChatPage() {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            {conversationId && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  if (confirm("Supprimer cette conversation ?")) {
-                    deleteConversation()
-                  }
-                }}
-                className="h-10 w-10 rounded-lg hover:bg-red-100/80 text-red-600"
-                title="Supprimer cette conversation"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 pb-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-6 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
         {messages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1224,8 +1309,8 @@ export default function AIChatPage() {
               Bonjour ! 👋
             </h2>
             <p className="text-sm text-gray-600 mb-8 max-w-md mx-auto text-center font-light">
-              Décrivez votre problème automobile et je vais vous aider à identifier les causes probables, 
-              le niveau d'urgence et vous recommander le service approprié.
+              Je vais vous poser quelques questions pour diagnostiquer votre problème automobile. 
+              Répondez simplement et je vous proposerai le service adapté avec un rendez-vous.
             </p>
             
             {/* Propositions de premiers messages */}
@@ -1258,13 +1343,24 @@ export default function AIChatPage() {
                       
                       // Vérifier qu'un véhicule est sélectionné
                       if (!selectedVehicle) {
-                        toast({
-                          title: "Véhicule requis",
-                          description: "Veuillez sélectionner un véhicule pour commencer une conversation.",
-                          variant: "destructive",
-                        })
-                        setShowVehicleSelector(true)
-                        return
+                        // Si aucun véhicule n'est disponible, permettre quand même l'envoi
+                        if (vehicles.length === 0) {
+                          toast({
+                            title: "Aucun véhicule",
+                            description: "Vous pouvez quand même poser une question, mais le diagnostic sera plus général.",
+                            variant: "default",
+                          })
+                          // Continuer sans véhicule
+                        } else {
+                          // Si des véhicules existent mais aucun n'est sélectionné, ouvrir le sélecteur
+                          toast({
+                            title: "Véhicule requis",
+                            description: "Veuillez sélectionner un véhicule pour commencer une conversation.",
+                            variant: "destructive",
+                          })
+                          setShowVehicleSelector(true)
+                          return
+                        }
                       }
                       
                       setIsLoading(true)
@@ -1282,15 +1378,15 @@ export default function AIChatPage() {
                       
                       try {
                         
-                        // Préparer le véhicule sélectionné à envoyer
-                        const vehiclesPayload = [selectedVehicle].map(v => ({
+                        // Préparer le véhicule sélectionné à envoyer (ou un tableau vide si aucun véhicule)
+                        const vehiclesPayload = selectedVehicle ? [selectedVehicle].map(v => ({
                           id: v.id,
                           brand: v.brand || 'Marque inconnue',
                           model: v.model || 'Modèle inconnu',
                           license_plate: v.license_plate || null,
                           year: v.year || null,
                           fuel_type: v.fuel_type || null,
-                        }))
+                        })) : []
                         
                         // Appeler l'API IA
                         const response = await fetch('/api/ai-chat', {
@@ -1303,6 +1399,7 @@ export default function AIChatPage() {
                             message: userMessage,
                             userId: user.id,
                             vehicles: vehiclesPayload,
+                            model: selectedModel,
                             profile: profile ? {
                               first_name: profile.first_name,
                               last_name: profile.last_name,
@@ -1661,25 +1758,36 @@ export default function AIChatPage() {
                               try {
                                 // Vérifier qu'un véhicule est sélectionné
                                 if (!selectedVehicle) {
-                                  toast({
-                                    title: "Véhicule requis",
-                                    description: "Veuillez sélectionner un véhicule pour continuer.",
-                                    variant: "destructive",
-                                  })
-                                  setShowVehicleSelector(true)
-                                  setIsLoading(false)
-                                  return
+                                  // Si aucun véhicule n'est disponible, permettre quand même l'envoi
+                                  if (vehicles.length === 0) {
+                                    toast({
+                                      title: "Aucun véhicule",
+                                      description: "Vous pouvez quand même poser une question, mais le diagnostic sera plus général.",
+                                      variant: "default",
+                                    })
+                                    // Continuer sans véhicule
+                                  } else {
+                                    // Si des véhicules existent mais aucun n'est sélectionné, ouvrir le sélecteur
+                                    toast({
+                                      title: "Véhicule requis",
+                                      description: "Veuillez sélectionner un véhicule pour continuer.",
+                                      variant: "destructive",
+                                    })
+                                    setShowVehicleSelector(true)
+                                    setIsLoading(false)
+                                    return
+                                  }
                                 }
                                 
-                                // Préparer le véhicule sélectionné à envoyer
-                                const vehiclesPayload = [selectedVehicle].map(v => ({
+                                // Préparer le véhicule sélectionné à envoyer (ou un tableau vide si aucun véhicule)
+                                const vehiclesPayload = selectedVehicle ? [selectedVehicle].map(v => ({
                                   id: v.id,
                                   brand: v.brand || 'Marque inconnue',
                                   model: v.model || 'Modèle inconnu',
                                   license_plate: v.license_plate || null,
                                   year: v.year || null,
                                   fuel_type: v.fuel_type || null,
-                                }))
+                                })) : []
                                 
                                 // Appeler l'API IA
                                 const response = await fetch('/api/ai-chat', {
@@ -1692,6 +1800,7 @@ export default function AIChatPage() {
                                     message: userMessage,
                                     userId: user.id,
                                     vehicles: vehiclesPayload,
+                                    model: selectedModel,
                                     profile: profile ? {
                                       first_name: profile.first_name,
                                       last_name: profile.last_name,
@@ -1854,35 +1963,52 @@ export default function AIChatPage() {
         </div>
 
         {/* Input */}
-        <div className="sticky bottom-0 bg-white/40 backdrop-blur-xl border-t border-white/20 px-4 py-4 pb-20 sm:pb-24 z-50">
-          <div className="flex gap-2 items-end">
-            <Input
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  sendMessage()
-                }
-              }}
-              placeholder="Décrivez votre problème..."
-              disabled={isLoading}
-              className="flex-1 min-h-[44px] text-sm bg-white/60 backdrop-blur-sm border-white/40 rounded-lg"
-            />
-            <Button
-              onClick={() => sendMessage()}
-              disabled={!inputMessage.trim() || isLoading}
-              className="h-[44px] w-[44px] rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all flex-shrink-0"
+        <AnimatePresence>
+          {!showConversationsList && (
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="flex-shrink-0 bg-white/40 backdrop-blur-xl border-t border-white/20 px-4 py-4 pb-20 sm:pb-24 z-[60] relative"
             >
-              <Send className="h-4 w-4 text-white" />
-            </Button>
-          </div>
-          {!apiAvailable && (
-            <p className="text-xs text-gray-500 mt-2 text-center font-light">
-              Le service de diagnostic IA est momentanément indisponible
-            </p>
+              <div className="flex gap-2 items-end">
+                <Input
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      sendMessage()
+                    }
+                  }}
+                  placeholder="Décrivez votre problème..."
+                  disabled={isLoading}
+                  className="flex-1 min-h-[44px] text-sm bg-white/60 backdrop-blur-sm border-white/40 rounded-lg relative z-[70]"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  data-form-type="other"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                />
+                <Button
+                  onClick={() => sendMessage()}
+                  disabled={!inputMessage.trim() || isLoading}
+                  className="h-[44px] w-[44px] rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-md hover:shadow-lg transition-all flex-shrink-0 relative z-[70]"
+                >
+                  <Send className="h-4 w-4 text-white" />
+                </Button>
+              </div>
+              {!apiAvailable && (
+                <p className="text-xs text-gray-500 mt-2 text-center font-light">
+                  Le service de diagnostic IA est momentanément indisponible
+                </p>
+              )}
+            </motion.div>
           )}
-        </div>
+        </AnimatePresence>
       </div>
 
       <BottomNavigation />

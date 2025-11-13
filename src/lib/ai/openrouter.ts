@@ -4,11 +4,11 @@
 export const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1";
 
 // Lire la clé API depuis les variables d'environnement
-// Sur AWS Amplify, utilise process.env.OPENROUTER_API_KEY
-// En local, utilise le fallback pour le développement
-// ⚠️ IMPORTANT: La clé API doit être configurée dans AWS Amplify Environment Variables
-// Si la clé n'est pas trouvée dans les variables d'environnement, utilise le fallback
-export const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || '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';
+// ⚠️ SÉCURITÉ: La clé API DOIT être configurée dans les variables d'environnement
+// Sur AWS Amplify: Configurez OPENROUTER_API_KEY dans Environment Variables
+// En local: Créez un fichier .env.local avec OPENROUTER_API_KEY=votre_clé
+// ⚠️ NE JAMAIS hardcoder la clé API dans le code source
+export const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY || undefined;
 
 /**
  * Construit les en-têtes OpenRouter requis
@@ -31,9 +31,12 @@ export function getOpenRouterHeaders() {
 // Pour compatibilité avec l'ancien code
 export const OPENROUTER_HEADERS = getOpenRouterHeaders();
 
-// Liste **strictement gratuite** de modèles OpenRouter
+// ⚠️ LISTE STRICTEMENT GRATUITE - AUCUN MODÈLE PAYANT
+// Tous les modèles ci-dessous sont 100% GRATUITS (suffixe :free ou modèles gratuits d'OpenRouter)
+// ⚠️ NE JAMAIS ajouter de modèles payants à cette liste
+// ⚠️ Cette liste est la SEULE source de modèles autorisés - aucun autre modèle ne sera utilisé
 export const FREE_MODELS = [
-  "openrouter/polaris-alpha",
+  "openrouter/polaris-alpha", // Modèle gratuit OpenRouter
   "deepseek/deepseek-chat-v3.1:free",
   "google/gemini-2.0-flash-exp:free",
   "google/gemini-flash-1.5:free",
@@ -47,7 +50,7 @@ export const FREE_MODELS = [
   "z-ai/glm-4.5-air:free",
   "qwen/qwen3-coder:free",
   "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-  // Modèles de fallback supplémentaires (anciens modèles qui fonctionnent encore)
+  // Modèles de fallback supplémentaires (anciens modèles gratuits qui fonctionnent encore)
   "mistralai/mistral-7b-instruct:free",
 ] as const;
 
@@ -59,30 +62,28 @@ export type FreeModel = (typeof FREE_MODELS)[number];
  */
 export function ensureServerEnv() {
   if (!OPENROUTER_KEY) {
-    throw new Error("Missing OPENROUTER_API_KEY");
+    throw new Error("Missing OPENROUTER_API_KEY. Please configure OPENROUTER_API_KEY in environment variables (AWS Amplify or .env.local)");
   }
   
-  // Vérifier si la clé vient des variables d'environnement ou du fallback
+  // Vérifier si la clé vient des variables d'environnement
   const apiKeyFromEnv = !!(process.env.OPENROUTER_API_KEY || process.env.OPENROUTER_KEY);
-  const apiKeySource = apiKeyFromEnv ? 'ENV' : 'FALLBACK';
+  
+  if (!apiKeyFromEnv) {
+    throw new Error("OPENROUTER_API_KEY must be set in environment variables. Never hardcode API keys in source code.");
+  }
   
   // Log pour débogage (sans exposer la clé complète)
   console.log('🔑 Configuration OpenRouter:', {
     apiKeyLength: OPENROUTER_KEY.length,
     apiKeyPrefix: `${OPENROUTER_KEY.substring(0, 20)}...`,
     apiKeySuffix: `...${OPENROUTER_KEY.substring(OPENROUTER_KEY.length - 5)}`,
-    apiKeyFromEnv: apiKeyFromEnv,
-    apiKeySource: apiKeySource,
+    apiKeyFromEnv: true,
+    apiKeySource: 'ENV',
     envVarExists: !!process.env.OPENROUTER_API_KEY,
     envVarLength: process.env.OPENROUTER_API_KEY?.length || 0,
     baseUrl: OPENROUTER_URL,
     referer: process.env.OPENROUTER_REFERER || process.env.OPENROUTER_SITE_URL || '',
   });
-  
-  // Avertir si on utilise le fallback en production
-  if (!apiKeyFromEnv && process.env.NODE_ENV === 'production') {
-    console.warn('⚠️ ATTENTION: Utilisation de la clé API fallback en production. Configurez OPENROUTER_API_KEY dans AWS Amplify.');
-  }
 }
 
 /**
@@ -113,9 +114,11 @@ export async function callOpenRouter(
   } = {}
 ) {
   // ⚠️ SÉCURITÉ: Valider que le modèle est dans la liste blanche
+  // Si le modèle n'est pas gratuit, utiliser un modèle gratuit par défaut
   if (!isValidFreeModel(model)) {
-    console.error(`❌ Modèle non autorisé: ${model}. Utilisation du modèle par défaut.`);
-    model = "openrouter/polaris-alpha"; // Modèle par défaut gratuit
+    console.error(`❌ Modèle non autorisé (payant?): ${model}. Utilisation d'un modèle GRATUIT par défaut.`);
+    // Utiliser le premier modèle gratuit disponible
+    model = FREE_MODELS[0] || "deepseek/deepseek-chat-v3.1:free";
   }
   
   const { temperature = 0.7, max_tokens = 1500, timeout = 30000, retries = 1 } = options;
