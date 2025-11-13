@@ -342,15 +342,20 @@ export default function AIChatPage() {
         }
         
         // Gérer les erreurs spécifiques
-        if (errorData.error === 'Server configuration error') {
-          throw new Error('Configuration serveur manquante. Les variables d\'environnement Supabase ne sont pas configurées.')
+        if (errorData.error === 'Server configuration error' || errorData.error === 'CONFIGURATION_ERROR') {
+          throw new Error('Configuration serveur manquante. Les variables d\'environnement Supabase ne sont pas configurées. Veuillez contacter le support technique.')
         }
         
         if (errorData.code === 'TABLE_NOT_FOUND') {
           throw new Error('Les tables de base de données n\'existent pas. Veuillez appliquer la migration SQL dans Supabase.')
         }
         
-        throw new Error(errorData.details || errorData.error || 'Erreur lors de l\'envoi du message')
+        // Si le message contient des détails sur les variables d'environnement
+        if (errorData.message?.includes('SUPABASE_SERVICE_ROLE_KEY') || errorData.details?.includes('environment variables')) {
+          throw new Error('Configuration serveur incomplète. Veuillez contacter le support technique.')
+        }
+        
+        throw new Error(errorData.details || errorData.message || errorData.error || 'Erreur lors de l\'envoi du message')
       }
 
       let data
@@ -540,6 +545,8 @@ export default function AIChatPage() {
         errorContent = '⚠️ Configuration serveur manquante. Veuillez contacter le support technique.'
       } else if (error.message?.includes('tables de base de données')) {
         errorContent = '⚠️ Les tables de base de données n\'existent pas. Veuillez appliquer la migration SQL dans Supabase.'
+      } else if (error.message?.includes('SUPABASE_SERVICE_ROLE_KEY') || error.message?.includes('environment variables')) {
+        errorContent = '⚠️ Configuration serveur incomplète. Les variables d\'environnement ne sont pas configurées. Veuillez contacter le support technique.'
       } else if (error.message) {
         errorContent = error.message
       }
