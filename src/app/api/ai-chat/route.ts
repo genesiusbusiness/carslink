@@ -13,7 +13,9 @@ function getSupabaseAdmin() {
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!serviceRoleKey) {
-      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set in environment variables')
+      console.error('❌ SUPABASE_SERVICE_ROLE_KEY is missing')
+      console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('SUPABASE')))
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set in environment variables. Please configure it in AWS Amplify Console → Environment variables.')
     }
 
     supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
@@ -168,6 +170,20 @@ Tu n'as PAS le droit d'inclure ta réflexion interne, uniquement ce JSON final.`
 
 export async function POST(req: NextRequest) {
   try {
+    // Vérifier que les variables d'environnement sont configurées
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('❌ SUPABASE_SERVICE_ROLE_KEY is missing in environment variables')
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: "CONFIGURATION_ERROR",
+          message: "SUPABASE_SERVICE_ROLE_KEY is not configured. Please add it in AWS Amplify Console → Environment variables.",
+          details: "The server is missing required environment variables. Contact the administrator."
+        },
+        { status: 500 }
+      );
+    }
+
     const body = await req.json();
     const { message, userId, conversationId, vehicles, profile } = body;
 
