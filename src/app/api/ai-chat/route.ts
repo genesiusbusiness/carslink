@@ -173,12 +173,14 @@ export async function POST(req: NextRequest) {
     // Vérifier que les variables d'environnement sont configurées
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       console.error('❌ SUPABASE_SERVICE_ROLE_KEY is missing in environment variables')
+      console.error('🔍 Available env vars with SUPABASE:', Object.keys(process.env).filter(k => k.includes('SUPABASE')))
+      console.error('🔍 All env vars:', Object.keys(process.env).sort())
       return NextResponse.json(
         { 
           success: false, 
           error: "CONFIGURATION_ERROR",
-          message: "SUPABASE_SERVICE_ROLE_KEY is not configured. Please add it in AWS Amplify Console → Environment variables.",
-          details: "The server is missing required environment variables. Contact the administrator."
+          message: "SUPABASE_SERVICE_ROLE_KEY is not configured. Please add it in AWS Amplify Console → Environment variables and REDEPLOY the application.",
+          details: "The server is missing required environment variables. After adding variables in AWS Amplify, you must REDEPLOY from the console (not just push to Git)."
         },
         { status: 500 }
       );
