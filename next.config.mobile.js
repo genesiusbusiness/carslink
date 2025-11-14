@@ -15,6 +15,11 @@ const nextConfig = {
   },
   // Trailing slash pour les routes
   trailingSlash: true,
+  // Désactiver la vérification stricte des routes dynamiques pour l'export statique
+  // Les routes seront gérées côté client via le routage JavaScript
+  experimental: {
+    missingSuspenseWithCSRBailout: false,
+  },
 }
 
 module.exports = nextConfig
