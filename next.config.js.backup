@@ -1,10 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Export statique pour Capacitor (mobile)
-  output: 'export',
   images: {
-    unoptimized: true, // Nécessaire pour l'export statique
     domains: ['localhost', 'yxkbvhymsvasknslhpsa.supabase.co'],
     remotePatterns: [
       {
@@ -13,8 +10,15 @@ const nextConfig = {
       },
     ],
   },
-  // Trailing slash pour les routes
-  trailingSlash: true,
+  // Configuration explicite pour la résolution des modules
+  webpack: (config, { isServer }) => {
+    // S'assurer que les alias sont correctement résolus
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': require('path').resolve(__dirname, 'src'),
+    }
+    return config
+  },
 }
 
 module.exports = nextConfig
