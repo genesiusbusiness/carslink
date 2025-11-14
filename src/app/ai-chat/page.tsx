@@ -36,6 +36,7 @@ export default function AIChatPage() {
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedAnswers, setSelectedAnswers] = useState<Map<number, string>>(new Map())
   const [selectedModel, setSelectedModel] = useState<ModelId | undefined>(undefined) // undefined = utiliser le modèle par défaut
+  const [showBetaWarning, setShowBetaWarning] = useState(true) // Afficher l'avertissement BETA par défaut
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
   const lastMessageRef = useRef<string>("")
@@ -454,28 +455,29 @@ export default function AIChatPage() {
       console.log('📥 Questions suggérées reçues de l\'API:', data.suggestedQuestions)
       
       if (data.suggestedQuestions && data.suggestedQuestions.length > 0) {
-        // Convertir les anciennes questions (strings) en nouveau format si nécessaire
-        const formattedQuestions = data.suggestedQuestions.map((q: any) => {
-          if (typeof q === 'string') {
-            // Si c'est une string, créer un objet avec des options par défaut
-            return { 
-              question: q, 
-              options: ['Oui', 'Non', 'Je ne sais pas'] 
+        // Filtrer et formater les questions - uniquement celles avec des options détaillées
+        const formattedQuestions = data.suggestedQuestions
+          .map((q: any) => {
+            // Ignorer les questions simples (strings) - l'IA doit fournir des options
+            if (typeof q === 'string') {
+              console.warn(`⚠️ Question simple ignorée (format obsolète): "${q}"`)
+              return null
             }
-          }
-          // Si c'est un objet mais sans options, ajouter des options par défaut
-          if (typeof q === 'object' && q.question) {
-            if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
-              console.warn(`⚠️ Question sans options détectée: "${q.question}", ajout d'options par défaut`)
-              return {
-                question: q.question,
-                options: ['Oui', 'Non', 'Je ne sais pas']
+            // Vérifier que c'est un objet avec question et options
+            if (typeof q === 'object' && q.question) {
+              if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
+                console.warn(`⚠️ Question sans options ignorée: "${q.question}"`)
+                return null
               }
+              // Vérifier qu'il y a au moins 3 options (pour un diagnostic efficace)
+              if (q.options.length < 3) {
+                console.warn(`⚠️ Question avec trop peu d'options (${q.options.length}): "${q.question}"`)
+              }
+              return q
             }
-          }
-          console.log('  Question formatée:', q)
-          return q
-        })
+            return null
+          })
+          .filter((q: any) => q !== null) // Filtrer les null
         console.log('✅ Questions formatées pour affichage:', formattedQuestions)
         setSuggestedQuestions(formattedQuestions)
         setSelectedAnswers(new Map()) // Réinitialiser les sélections pour les nouvelles questions
@@ -584,6 +586,33 @@ export default function AIChatPage() {
     try {
       setIsLoading(true)
       
+      // Charger la conversation pour récupérer le vehicle_id
+      const { data: conversationData, error: convError } = await supabase
+        .from('ai_chat_conversations')
+        .select('vehicle_id')
+        .eq('id', convId)
+        .single()
+
+      if (convError) {
+        console.error('⚠️ Erreur lors du chargement de la conversation:', convError)
+      }
+
+      // Si la conversation a un vehicle_id, restaurer le véhicule sélectionné
+      if (conversationData?.vehicle_id) {
+        const vehicleToRestore = vehicles.find(v => v.id === conversationData.vehicle_id)
+        if (vehicleToRestore) {
+          console.log('✅ Restauration du véhicule de la conversation:', vehicleToRestore.brand, vehicleToRestore.model)
+          setSelectedVehicle(vehicleToRestore)
+        } else {
+          console.warn('⚠️ Véhicule de la conversation non trouvé dans la liste des véhicules')
+          // Le véhicule n'existe peut-être plus, on le laisse à null
+          setSelectedVehicle(null)
+        }
+      } else {
+        // Pas de véhicule associé à cette conversation
+        setSelectedVehicle(null)
+      }
+      
       // Charger les messages depuis Supabase directement
       const { data: messagesData, error: messagesError } = await supabase
         .from('ai_chat_messages')
@@ -607,17 +636,24 @@ export default function AIChatPage() {
         if (lastMessage.role === 'assistant' && lastMessage.ai_analysis) {
           const analysis = lastMessage.ai_analysis as any
           if (analysis.needs_more_info && analysis.suggested_questions) {
-            const formattedQuestions = analysis.suggested_questions.map((q: any) => {
-              if (typeof q === 'string') {
-                return { question: q, options: ['Oui', 'Non', 'Je ne sais pas'] }
-              }
-              if (typeof q === 'object' && q.question) {
-                if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
-                  return { question: q.question, options: ['Oui', 'Non', 'Je ne sais pas'] }
+            const formattedQuestions = analysis.suggested_questions
+              .map((q: any) => {
+                // Ignorer les questions simples (strings) - l'IA doit fournir des options
+                if (typeof q === 'string') {
+                  console.warn(`⚠️ Question simple ignorée (format obsolète): "${q}"`)
+                  return null
                 }
-              }
-              return q
-            })
+                // Vérifier que c'est un objet avec question et options
+                if (typeof q === 'object' && q.question) {
+                  if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
+                    console.warn(`⚠️ Question sans options ignorée: "${q.question}"`)
+                    return null
+                  }
+                  return q
+                }
+                return null
+              })
+              .filter((q: any) => q !== null) // Filtrer les null
             setSuggestedQuestions(formattedQuestions)
           }
         }
@@ -683,13 +719,6 @@ export default function AIChatPage() {
     }
   }
 
-  const deleteMessage = (messageId: string) => {
-    setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
-    toast({
-      title: "Message supprimé",
-      description: "Le message a été supprimé",
-    })
-  }
 
   const deleteConversation = async (convId?: string) => {
     const idToDelete = convId || conversationId
@@ -1135,6 +1164,11 @@ export default function AIChatPage() {
                     setConversationId(null)
                     setSuggestedQuestions([])
                     setShowConversationsList(false)
+                    // Réinitialiser le véhicule sélectionné et afficher le sélecteur
+                    setSelectedVehicle(null)
+                    if (vehicles.length > 0) {
+                      setShowVehicleSelector(true)
+                    }
                   }}
                   className="w-full h-10 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-medium text-sm flex items-center justify-center gap-2"
                 >
@@ -1254,25 +1288,57 @@ export default function AIChatPage() {
       {/* Contenu principal */}
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         {/* Header */}
-        <div className="flex-shrink-0 z-30 bg-white/40 backdrop-blur-xl border-b border-white/20 px-4 py-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => router.push("/")}
-              className="h-10 w-10 rounded-full hover:bg-gray-100/80 transition-all text-gray-700"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl font-light text-gray-900">Assistant IA</h1>
-              <p className="text-xs text-gray-500 font-light">
-                {selectedVehicle 
-                  ? `${selectedVehicle.brand} ${selectedVehicle.model}${selectedVehicle.year ? ` (${selectedVehicle.year})` : ''}`
-                  : "Diagnostic automobile intelligent"
-                }
-              </p>
+        <div className="flex-shrink-0 z-30 bg-white/40 backdrop-blur-xl border-b border-white/20">
+          {/* Message d'avertissement BETA */}
+          {showBetaWarning && (
+            <div className="bg-red-50 border-b border-red-200/50 px-4 py-3">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-red-900 mb-1">
+                    ⚠️ Version BETA - Diagnostic indicatif
+                  </p>
+                  <p className="text-xs text-red-700 leading-relaxed">
+                    L'Assistant IA est actuellement en version BETA et n'est pas à 100% de ses capacités. 
+                    Il peut néanmoins vous fournir un diagnostic fiable et indicatif. 
+                    <span className="font-semibold"> Le diagnostic final et définitif doit être effectué par un garagiste professionnel lors de votre rendez-vous.</span>
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowBetaWarning(false)}
+                  className="flex-shrink-0 h-6 w-6 rounded-full hover:bg-red-100 active:bg-red-200 flex items-center justify-center transition-colors text-red-600"
+                  title="Fermer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
+          )}
+          
+          <div className="px-4 py-4">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push("/")}
+                className="h-10 w-10 rounded-full hover:bg-gray-100/80 transition-all text-gray-700"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h1 className="text-lg sm:text-xl font-light text-gray-900">Assistant IA</h1>
+                  <Badge className="bg-orange-50 border-orange-300 text-orange-700 text-[10px] font-semibold px-2 py-0.5">
+                    BETA
+                  </Badge>
+                </div>
+                <p className="text-xs text-gray-500 font-light">
+                  {selectedVehicle 
+                    ? `${selectedVehicle.brand} ${selectedVehicle.model}${selectedVehicle.year ? ` (${selectedVehicle.year})` : ''}`
+                    : "Diagnostic automobile intelligent"
+                  }
+                </p>
+              </div>
             {selectedVehicle && (
               <Button
                 variant="ghost"
@@ -1294,35 +1360,39 @@ export default function AIChatPage() {
             >
               <Menu className="h-5 w-5" />
             </Button>
+            </div>
           </div>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 space-y-6 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div 
+          className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-2 space-y-3 pb-4" 
+          style={{ WebkitOverflowScrolling: 'touch' }}
+        >
         {messages.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col items-center justify-center h-full py-12 px-4"
+            className="flex flex-col items-center justify-center min-h-0 py-4 px-4"
           >
-            <div className="relative mb-6">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full blur-2xl" />
-              <div className="relative h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg">
-                <Bot className="h-10 w-10 text-white" />
+            <div className="relative mb-3">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-full blur-xl" />
+              <div className="relative h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-md">
+                <Bot className="h-6 w-6 text-white" />
               </div>
             </div>
-            <h2 className="text-2xl font-light text-gray-900 mb-3">
+            <h2 className="text-lg font-light text-gray-900 mb-2">
               Bonjour ! 👋
             </h2>
-            <p className="text-sm text-gray-600 mb-8 max-w-md mx-auto text-center font-light">
+            <p className="text-xs text-gray-600 mb-4 max-w-md mx-auto text-center font-light leading-relaxed">
               Je vais vous poser quelques questions pour diagnostiquer votre problème automobile. 
               Répondez simplement et je vous proposerai le service adapté avec un rendez-vous.
             </p>
             
             {/* Propositions de premiers messages */}
-            <div className="space-y-4 max-w-2xl w-full mx-auto">
-              <p className="text-xs text-gray-500 font-light mb-4 text-center">Ou commencez par choisir un problème :</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2 max-w-2xl w-full mx-auto">
+              <p className="text-[10px] text-gray-500 font-light mb-2 text-center">Ou commencez par choisir un problème :</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   "J'ai un bruit au freinage",
                   "Un voyant s'allume sur mon tableau de bord",
@@ -1462,25 +1532,31 @@ export default function AIChatPage() {
                         })
 
                         if (data.suggestedQuestions && data.suggestedQuestions.length > 0) {
-                          const formattedQuestions = data.suggestedQuestions.map((q: any) => {
-                            if (typeof q === 'string') {
-                              return { 
-                                question: q, 
-                                options: ['Oui', 'Non', 'Je ne sais pas'] 
+                          const formattedQuestions = data.suggestedQuestions
+                            .map((q: any) => {
+                              // Ignorer les questions simples (strings) - l'IA doit fournir des options
+                              if (typeof q === 'string') {
+                                console.warn(`⚠️ Question simple ignorée (format obsolète): "${q}"`)
+                                return null
                               }
-                            }
-                            if (typeof q === 'object' && q.question) {
-                              if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
-                                return {
-                                  question: q.question,
-                                  options: ['Oui', 'Non', 'Je ne sais pas']
+                              // Vérifier que c'est un objet avec question et options
+                              if (typeof q === 'object' && q.question) {
+                                if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
+                                  console.warn(`⚠️ Question sans options ignorée: "${q.question}"`)
+                                  return null
                                 }
+                                return q
                               }
-                            }
-                            return q
-                          })
-                          setSuggestedQuestions(formattedQuestions)
-                          setSelectedAnswers(new Map()) // Réinitialiser les sélections pour les nouvelles questions
+                              return null
+                            })
+                            .filter((q: any) => q !== null) // Filtrer les null
+                          if (formattedQuestions.length > 0) {
+                            setSuggestedQuestions(formattedQuestions)
+                            setSelectedAnswers(new Map()) // Réinitialiser les sélections pour les nouvelles questions
+                          } else {
+                            setSuggestedQuestions([])
+                            setSelectedAnswers(new Map())
+                          }
                         } else {
                           setSuggestedQuestions([])
                           setSelectedAnswers(new Map()) // Réinitialiser les sélections
@@ -1494,16 +1570,22 @@ export default function AIChatPage() {
                           
                           // Afficher un message d'erreur plus informatif
                           const errorDetails = data.analysis?.error_details
-                          let errorContent = 'Une erreur est survenue lors de la communication avec l\'IA. Veuillez réessayer dans quelques instants.'
+                          // Utiliser le message du backend s'il existe, sinon générer un message par défaut
+                          let errorContent = data.message?.content || 'Une erreur est survenue lors de la communication avec l\'IA. Veuillez réessayer dans quelques instants.'
                           
+                          // Si le message du backend est générique, le remplacer par un message plus spécifique
                           if (errorDetails?.message) {
-                            if (errorDetails.message.includes('429') || errorDetails.message.includes('rate limit')) {
-                              errorContent = '⚠️ Le service est temporairement surchargé. Veuillez réessayer dans quelques instants.'
-                            } else if (errorDetails.message.includes('401') || errorDetails.message.includes('403')) {
-                              errorContent = '⚠️ Erreur d\'authentification avec le service IA. Veuillez contacter le support.'
+                            if (errorDetails.message === 'RATE_LIMIT' || errorDetails.message.includes('429') || errorDetails.message.includes('rate limit')) {
+                              // Le message du backend est déjà bon, mais on peut l'améliorer visuellement
+                              if (!errorContent.includes('limite de requêtes')) {
+                                errorContent = '⚠️ Le service de diagnostic IA a atteint sa limite de requêtes. Veuillez patienter quelques instants et réessayer. Les modèles gratuits ont des limites de taux pour éviter les abus.'
+                              }
+                            } else if (errorDetails.message.includes('401') || errorDetails.message.includes('403') || errorDetails.message.includes('OPENROUTER_AUTH')) {
+                              errorContent = '⚠️ Erreur d\'authentification avec le service IA. Veuillez contacter le support technique.'
                             } else if (errorDetails.message.includes('timeout')) {
                               errorContent = '⚠️ La requête a pris trop de temps. Veuillez réessayer.'
-                            } else {
+                            } else if (!data.message?.content) {
+                              // Seulement si le backend n'a pas fourni de message
                               errorContent = `⚠️ Erreur: ${errorDetails.message}`
                             }
                           }
@@ -1563,7 +1645,7 @@ export default function AIChatPage() {
                         setIsLoading(false)
                       }
                     }}
-                    className="text-left text-xs px-4 py-3 bg-white/60 backdrop-blur-sm hover:bg-white/80 border border-gray-200/50 hover:border-blue-300/50 rounded-lg transition-all text-gray-700 shadow-sm hover:shadow-md font-light"
+                    className="text-left text-[11px] px-3 py-2 bg-white/60 backdrop-blur-sm hover:bg-white/80 border border-gray-200/50 hover:border-blue-300/50 rounded-lg transition-all text-gray-700 shadow-sm hover:shadow-md font-light leading-snug"
                     whileHover={{ scale: 1.02, y: -2 }}
                     whileTap={{ scale: 0.98 }}
                   >
@@ -1581,45 +1663,31 @@ export default function AIChatPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'} items-start group`}
+                className={`flex gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'} items-start group`}
               >
                 {message.role === 'assistant' && (
-                  <div className="flex-shrink-0 h-9 w-9 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-md">
-                    <Bot className="h-5 w-5 text-white" />
+                  <div className="flex-shrink-0 h-7 w-7 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-sm">
+                    <Bot className="h-4 w-4 text-white" />
                   </div>
                 )}
                 <div className="relative max-w-[85%] sm:max-w-[75%]">
                   <div
-                    className={`rounded-lg px-4 py-3 ${
+                    className={`rounded-lg px-3 py-2 ${
                       message.role === 'user'
                         ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md'
                         : 'bg-white/60 backdrop-blur-sm border border-white/40 text-gray-900 shadow-sm'
                     }`}
                   >
-                    <div className="text-sm whitespace-pre-wrap font-light leading-relaxed">{message.content}</div>
-                    
-                    {/* Bouton de suppression - visible uniquement au survol */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (confirm("Supprimer ce message ?")) {
-                          deleteMessage(message.id)
-                        }
-                      }}
-                      className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 hover:bg-red-600 active:bg-red-700 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-md z-10 touch-manipulation"
-                      title="Supprimer ce message"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    <div className="text-xs whitespace-pre-wrap font-light leading-relaxed">{message.content}</div>
                   
                   {/* Analyse IA (uniquement si ce n'est pas une salutation) */}
                   {message.role === 'assistant' && message.ai_analysis && !(message.ai_analysis as any)?.is_greeting && (
-                    <div className="mt-4 pt-4 border-t border-gray-200/50 space-y-3">
+                    <div className="mt-2 pt-2 border-t border-gray-200/50 space-y-2">
                       {/* Causes probables */}
                       {message.ai_analysis.causes && message.ai_analysis.causes.length > 0 && (
-                        <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100/50">
-                          <p className="text-xs font-medium text-gray-700 mb-2">Causes probables :</p>
-                          <ul className="text-xs text-gray-600 space-y-1.5 font-light">
+                        <div className="bg-blue-50/50 rounded-lg p-2 border border-blue-100/50">
+                          <p className="text-[10px] font-medium text-gray-700 mb-1">Causes probables :</p>
+                          <ul className="text-[10px] text-gray-600 space-y-1 font-light">
                             {message.ai_analysis.causes.map((cause, index) => (
                               <li key={index} className="flex items-start gap-2">
                                 <span className="text-blue-500 mt-0.5 flex-shrink-0">•</span>
@@ -1635,7 +1703,7 @@ export default function AIChatPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           {message.ai_analysis.urgency && getUrgencyBadge(message.ai_analysis.urgency)}
                           {message.ai_analysis.recommended_service && (
-                            <span className="text-xs text-gray-600 font-light">
+                            <span className="text-[10px] text-gray-600 font-light">
                               Service : <span className="font-medium text-gray-900">{message.ai_analysis.recommended_service}</span>
                             </span>
                           )}
@@ -1646,10 +1714,10 @@ export default function AIChatPage() {
                       {message.ai_analysis.recommended_service && (message.ai_analysis as any)?.diagnostic_complete && (
                         <>
                           {/* Message d'avertissement */}
-                          <div className="p-3 bg-red-50/80 backdrop-blur-sm border border-red-200/50 rounded-lg">
-                            <div className="flex items-start gap-2">
-                              <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-                              <p className="text-xs text-red-700 leading-relaxed font-light">
+                          <div className="p-2 bg-red-50/80 backdrop-blur-sm border border-red-200/50 rounded-lg">
+                            <div className="flex items-start gap-1.5">
+                              <AlertCircle className="h-3 w-3 text-red-600 flex-shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-red-700 leading-relaxed font-light">
                                 <span className="font-medium">⚠️ Avertissement :</span> Ce diagnostic est fourni par une intelligence artificielle à titre indicatif uniquement. Il ne remplace pas l'expertise d'un professionnel. Veuillez consulter un mécanicien qualifié lors de votre rendez-vous pour un diagnostic précis et une réparation appropriée.
                               </p>
                             </div>
@@ -1658,11 +1726,11 @@ export default function AIChatPage() {
                           {/* Bouton de réservation */}
                           <motion.button
                             onClick={() => handleReservation(message.ai_analysis)}
-                            className="w-full py-2.5 px-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 hover:shadow-md transition-all"
+                            className="w-full py-2 px-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 hover:shadow-md transition-all"
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
                           >
-                            <Calendar className="h-4 w-4" />
+                            <Calendar className="h-3 w-3" />
                             Réserver un rendez-vous
                           </motion.button>
                         </>
@@ -1862,25 +1930,31 @@ export default function AIChatPage() {
                                 })
 
                                 if (data.suggestedQuestions && data.suggestedQuestions.length > 0) {
-                                  const formattedQuestions = data.suggestedQuestions.map((q: any) => {
-                                    if (typeof q === 'string') {
-                                      return { 
-                                        question: q, 
-                                        options: ['Oui', 'Non', 'Je ne sais pas'] 
+                                  const formattedQuestions = data.suggestedQuestions
+                                    .map((q: any) => {
+                                      // Ignorer les questions simples (strings) - l'IA doit fournir des options
+                                      if (typeof q === 'string') {
+                                        console.warn(`⚠️ Question simple ignorée (format obsolète): "${q}"`)
+                                        return null
                                       }
-                                    }
-                                    if (typeof q === 'object' && q.question) {
-                                      if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
-                                        return {
-                                          question: q.question,
-                                          options: ['Oui', 'Non', 'Je ne sais pas']
+                                      // Vérifier que c'est un objet avec question et options
+                                      if (typeof q === 'object' && q.question) {
+                                        if (!q.options || !Array.isArray(q.options) || q.options.length === 0) {
+                                          console.warn(`⚠️ Question sans options ignorée: "${q.question}"`)
+                                          return null
                                         }
+                                        return q
                                       }
-                                    }
-                                    return q
-                                  })
-                                  setSuggestedQuestions(formattedQuestions)
-                                  setSelectedAnswers(new Map()) // Réinitialiser les sélections pour les nouvelles questions
+                                      return null
+                                    })
+                                    .filter((q: any) => q !== null) // Filtrer les null
+                                  if (formattedQuestions.length > 0) {
+                                    setSuggestedQuestions(formattedQuestions)
+                                    setSelectedAnswers(new Map()) // Réinitialiser les sélections pour les nouvelles questions
+                                  } else {
+                                    setSuggestedQuestions([])
+                                    setSelectedAnswers(new Map())
+                                  }
                                 } else {
                                   setSuggestedQuestions([])
                                   setSelectedAnswers(new Map()) // Réinitialiser les sélections
@@ -1965,7 +2039,7 @@ export default function AIChatPage() {
             </div>
           </motion.div>
         )}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} className="h-1" />
         </div>
 
         {/* Input */}

@@ -62,11 +62,13 @@ function buildStateJson(
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
   lastUserMessage: string
 ): string {
+  const isFirstMessage = history.length === 0;
   const state = {
     user_profile: profile || {},
     vehicles: vehicles || [],
     history: history || [],
     last_user_message: lastUserMessage,
+    is_first_message: isFirstMessage, // Indication pour savoir si c'est le début de la conversation
     context: "CarsLink est une plateforme de mise en relation entre clients et garages automobiles. Tu es un assistant de pré-diagnostic qui aide les clients à décrire leurs problèmes et à identifier le type de service dont ils ont besoin.",
   };
 
@@ -85,7 +87,67 @@ async function callOpenRouter(
 
 Tu aides un client à décrire les symptômes de son véhicule, tu proposes des causes probables, un niveau d'urgence, et tu suggères un type de service (libellé texte, ex: 'Contrôle / remplacement freins', 'Diagnostic électronique', 'Vidange & entretien', etc.). 
 
-Tu peux aussi demander des informations complémentaires sous forme de questions simples. 
+📋 RÈGLES DE CONVERSATION :
+
+- Le STATE JSON contient un champ "is_first_message" qui indique si c'est le début de la conversation.
+- Si "is_first_message" est true (ou si l'historique est vide), tu peux faire une salutation brève et personnalisée (ex: "Bonjour [Prénom]").
+- Si "is_first_message" est false (ou si l'historique contient des messages), NE refais JAMAIS de salutation. Va DIRECTEMENT au diagnostic ou aux questions sans saluer.
+- Ne dis JAMAIS "Bonjour [Nom]" à chaque message dans la même conversation.
+- Sois naturel et enchaîne directement sur le diagnostic ou les questions complémentaires.
+- Dans une conversation en cours, commence ta réponse directement par l'analyse du problème ou les questions, sans formule de politesse répétitive.
+
+🎯 STRATÉGIE DE DIAGNOSTIC RAPIDE :
+
+Pour accélérer le diagnostic, pose TOUJOURS des questions PRÉCISES et DÉTAILLÉES avec des options de réponses concrètes. Évite absolument les questions simples "Oui/Non/Je ne sais pas".
+
+EXEMPLES DE BONNES QUESTIONS (à utiliser comme modèle) :
+
+❌ MAUVAIS : "Le voyant est-il allumé ?" (trop vague)
+✅ BON : {
+  "question": "Quel voyant s'affiche sur votre tableau de bord ?",
+  "options": [
+    "Voyant moteur (orange/rouge)",
+    "Voyant huile (rouge)",
+    "Voyant batterie (rouge)",
+    "Voyant frein (rouge)",
+    "Voyant température (rouge)",
+    "Aucun voyant"
+  ]
+}
+
+❌ MAUVAIS : "Y a-t-il du bruit ?" (trop vague)
+✅ BON : {
+  "question": "Quel type de bruit entendez-vous ?",
+  "options": [
+    "Grincement métallique aigu",
+    "Claquement ou cognement sourd",
+    "Sifflement ou sifflement aigu",
+    "Bourdonnement ou ronflement",
+    "Vibration ou tremblement",
+    "Aucun bruit particulier"
+  ]
+}
+
+❌ MAUVAIS : "Cela se produit-il souvent ?" (trop vague)
+✅ BON : {
+  "question": "Quand ce problème se produit-il exactement ?",
+  "options": [
+    "Au démarrage du moteur",
+    "Lors de l'accélération",
+    "Lors du freinage",
+    "En tournant le volant",
+    "À vitesse constante",
+    "En permanence, même à l'arrêt"
+  ]
+}
+
+RÈGLES POUR LES QUESTIONS :
+1. TOUJOURS utiliser le format avec options (pas de questions simples)
+2. Les options doivent être SPÉCIFIQUES et TECHNIQUES (ex: "Grincement métallique" plutôt que "Bruit")
+3. Cible les informations CRITIQUES pour identifier rapidement la cause
+4. Maximum 2 questions à la fois (pour garantir un JSON complet et ne pas surcharger le client)
+5. Les questions doivent permettre d'éliminer rapidement plusieurs causes possibles
+6. Chaque question doit avoir entre 4 et 6 options pour être efficace
 
 IMPORTANT :
 
@@ -107,8 +169,7 @@ Le JSON doit être de la forme :
     "diagnostic_complete": boolean,
     "needs_more_info": boolean,
     "suggested_questions": [
-      "question simple" 
-      OU { "question": "string", "options": ["option 1", "option 2", ...] }
+      { "question": "string", "options": ["option 1", "option 2", "option 3", ...] }
     ],
     "is_greeting": boolean,
     "error_details": null OU { "name": "string", "message": "string", "stack": "string", ... }
@@ -116,8 +177,10 @@ Le JSON doit être de la forme :
 }
 
 - Si tu es sûr d'un type de prestation adapté, mets diagnostic_complete = true et needs_more_info = false.
-- Si tu as besoin de plus d'infos, mets diagnostic_complete = false, needs_more_info = true et remplis suggested_questions.
+- Si tu as besoin de plus d'infos, mets diagnostic_complete = false, needs_more_info = true et remplis suggested_questions avec des questions PRÉCISES et DÉTAILLÉES (format avec options uniquement).
 - Si le message de l'utilisateur est juste une salutation (ex: 'Bonjour') sans symptôme, tu peux répondre avec is_greeting = true et diagnostic_complete = false.
+
+⚠️ CRITIQUE : Tu DOIS renvoyer un JSON COMPLET et VALIDE. Ne coupe JAMAIS le JSON au milieu d'une chaîne ou d'un tableau. Si tu n'as pas assez d'espace, réduis le nombre de questions (maximum 2 questions avec options) plutôt que de couper le JSON.
 
 Tu n'as PAS le droit d'inclure ta réflexion interne, uniquement ce JSON final.`;
 
@@ -129,7 +192,8 @@ Tu n'as PAS le droit d'inclure ta réflexion interne, uniquement ce JSON final.`
   ];
 
   try {
-    const result = await callOpenRouterChat({ messages, model });
+    // Augmenter max_tokens pour permettre des réponses plus longues avec plusieurs questions détaillées
+    const result = await callOpenRouterChat({ messages, model, max_tokens: 2000 });
     const content = result.content || '';
 
     // Essayer de parser le JSON de la réponse
@@ -137,16 +201,115 @@ Tu n'as PAS le droit d'inclure ta réflexion interne, uniquement ce JSON final.`
       let jsonContent = content.trim();
       jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       
-      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+      // Chercher le JSON - essayer plusieurs stratégies
+      let jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+      
+      if (!jsonMatch) {
+        // Essayer de trouver le JSON même s'il est incomplet
+        const firstBrace = jsonContent.indexOf('{');
+        if (firstBrace !== -1) {
+          jsonContent = jsonContent.substring(firstBrace);
+          jsonMatch = jsonContent.match(/\{[\s\S]*/);
+        }
+      }
+      
       if (jsonMatch) {
-        const parsed: ParsedAIResponse = JSON.parse(jsonMatch[0]);
-        return parsed;
+        let jsonStr = jsonMatch[0];
+        
+        // Essayer de réparer un JSON incomplet
+        if (!jsonStr.endsWith('}')) {
+          // Compter les accolades pour voir si on peut fermer le JSON
+          const openBraces = (jsonStr.match(/\{/g) || []).length;
+          const closeBraces = (jsonStr.match(/\}/g) || []).length;
+          const missingBraces = openBraces - closeBraces;
+          
+          // Si le JSON semble tronqué, essayer de le compléter
+          if (missingBraces > 0 || !jsonStr.endsWith('}')) {
+            // Si on est dans suggested_questions et que c'est incomplet
+            if (jsonStr.includes('"suggested_questions"')) {
+              // Chercher la dernière question complète
+              const lastCompleteQuestion = jsonStr.lastIndexOf('}');
+              if (lastCompleteQuestion !== -1) {
+                // Vérifier si on est au milieu d'une chaîne ou d'un objet
+                const afterLastComplete = jsonStr.substring(lastCompleteQuestion + 1);
+                
+                // Si on est au milieu d'une chaîne (guillemets non fermés), on coupe avant
+                const lastQuote = jsonStr.lastIndexOf('"');
+                const openQuotes = (jsonStr.match(/"/g) || []).length;
+                const isInString = openQuotes % 2 !== 0;
+                
+                if (isInString) {
+                  // Couper avant la dernière chaîne incomplète
+                  const beforeLastQuote = jsonStr.lastIndexOf('"', lastQuote - 1);
+                  if (beforeLastQuote !== -1) {
+                    jsonStr = jsonStr.substring(0, beforeLastQuote + 1);
+                    // Chercher la dernière virgule avant cette chaîne
+                    const lastComma = jsonStr.lastIndexOf(',');
+                    if (lastComma > jsonStr.lastIndexOf('[')) {
+                      jsonStr = jsonStr.substring(0, lastComma);
+                    }
+                  }
+                } else {
+                  // Couper après la dernière question complète
+                  const lastComma = jsonStr.lastIndexOf(',', lastCompleteQuestion);
+                  if (lastComma > jsonStr.lastIndexOf('[')) {
+                    jsonStr = jsonStr.substring(0, lastComma);
+                  } else {
+                    jsonStr = jsonStr.substring(0, lastCompleteQuestion + 1);
+                  }
+                }
+                
+                // Fermer suggested_questions, analysis et l'objet principal
+                if (!jsonStr.endsWith(']')) {
+                  jsonStr += ']';
+                }
+                // Compter les accolades manquantes après réparation
+                const openBracesAfter = (jsonStr.match(/\{/g) || []).length;
+                const closeBracesAfter = (jsonStr.match(/\}/g) || []).length;
+                const missingAfter = openBracesAfter - closeBracesAfter;
+                if (missingAfter > 0) {
+                  jsonStr += '}'.repeat(missingAfter);
+                }
+              } else {
+                // Aucune question complète, fermer proprement
+                if (jsonStr.includes('[') && !jsonStr.endsWith(']')) {
+                  jsonStr += ']';
+                }
+                jsonStr += '}'.repeat(missingBraces);
+              }
+            } else {
+              // Fermer simplement les accolades manquantes
+              jsonStr += '}'.repeat(missingBraces);
+            }
+          }
+        }
+        
+        try {
+          const parsed: ParsedAIResponse = JSON.parse(jsonStr);
+          
+          // Valider que les questions ont bien des options
+          if (parsed.analysis.suggested_questions) {
+            parsed.analysis.suggested_questions = parsed.analysis.suggested_questions.filter((q: any) => {
+              if (typeof q === 'object' && q.question) {
+                return q.options && Array.isArray(q.options) && q.options.length > 0;
+              }
+              return false;
+            });
+          }
+          
+          return parsed;
+        } catch (parseErr) {
+          console.error('❌ Erreur après réparation JSON:', parseErr);
+          console.error('📄 JSON réparé (premiers 1000 chars):', jsonStr.substring(0, 1000));
+          throw parseErr;
+        }
       }
       
       throw new Error('No JSON found in response');
     } catch (parseError) {
       console.error('❌ Erreur lors du parsing JSON de la réponse OpenRouter:', parseError);
-      console.error('📄 Contenu brut reçu:', content.substring(0, 500));
+      console.error('📄 Contenu brut reçu (premiers 1500 chars):', content.substring(0, 1500));
+      console.error('📄 Longueur totale:', content.length);
       
       return {
         assistant_reply: "Je rencontre un problème technique pour analyser votre demande pour le moment. Veuillez réessayer plus tard.",
@@ -154,7 +317,8 @@ Tu n'as PAS le droit d'inclure ta réflexion interne, uniquement ce JSON final.`
           error_details: {
             name: 'JSONParseError',
             message: 'Invalid JSON from OpenRouter model',
-            raw: content.substring(0, 1000),
+            raw: content.substring(0, 2000),
+            content_length: content.length,
           },
           diagnostic_complete: false,
           needs_more_info: true,
@@ -220,15 +384,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Gérer la conversation (créer ou récupérer)
+    // 2. Extraire le vehicle_id du premier véhicule si disponible
+    const vehicleId = vehicles && vehicles.length > 0 ? vehicles[0].id : null;
+
+    // 3. Gérer la conversation (créer ou récupérer)
     let conversationIdToUse = conversationId;
     
     if (!conversationIdToUse) {
-      // Créer une nouvelle conversation
+      // Créer une nouvelle conversation avec le vehicle_id
       const { data: newConversation, error: convError } = await (supabaseAdminClient as any)
         .from('ai_chat_conversations')
         .insert({
           flynesis_user_id: flyAccount.id,
+          vehicle_id: vehicleId,
         })
         .select()
         .single();
@@ -245,7 +413,7 @@ export async function POST(req: NextRequest) {
       // Vérifier que la conversation existe et appartient à l'utilisateur
       const { data: existingConversation, error: convCheckError } = await (supabaseAdminClient as any)
         .from('ai_chat_conversations')
-        .select('flynesis_user_id')
+        .select('flynesis_user_id, vehicle_id')
         .eq('id', conversationIdToUse)
         .single();
 
@@ -255,6 +423,7 @@ export async function POST(req: NextRequest) {
           .from('ai_chat_conversations')
           .insert({
             flynesis_user_id: flyAccount.id,
+            vehicle_id: vehicleId,
           })
           .select()
           .single();
@@ -272,10 +441,18 @@ export async function POST(req: NextRequest) {
           { error: 'Unauthorized: conversation does not belong to user' },
           { status: 403 }
         );
+      } else {
+        // Si la conversation existe mais n'a pas de vehicle_id et qu'on en a un, le mettre à jour
+        if (!existingConversation.vehicle_id && vehicleId) {
+          await (supabaseAdminClient as any)
+            .from('ai_chat_conversations')
+            .update({ vehicle_id: vehicleId })
+            .eq('id', conversationIdToUse);
+        }
       }
     }
 
-    // 3. Insérer le message utilisateur
+    // 4. Insérer le message utilisateur
     const { data: savedUserMessage, error: userMsgError } = await (supabaseAdminClient as any)
       .from('ai_chat_messages')
       .insert({
@@ -294,7 +471,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 4. Charger l'historique de conversation (derniers 20 messages)
+    // 5. Charger l'historique de conversation (derniers 20 messages)
     const { data: historyMessages, error: historyError } = await (supabaseAdminClient as any)
       .from('ai_chat_messages')
       .select('role, content')
@@ -312,7 +489,7 @@ export async function POST(req: NextRequest) {
       content: m.content,
     }));
 
-    // 5. Préparer le profil (utiliser celui du frontend si fourni, sinon celui de la DB)
+    // 6. Préparer le profil (utiliser celui du frontend si fourni, sinon celui de la DB)
     const userProfile = profile || {
       first_name: flyAccount.first_name,
       last_name: flyAccount.last_name,
@@ -320,7 +497,7 @@ export async function POST(req: NextRequest) {
       phone: flyAccount.phone,
     };
 
-    // 6. Construire le STATE JSON
+    // 7. Construire le STATE JSON
     const stateJson = buildStateJson(
       userProfile,
       vehicles || [],
@@ -328,7 +505,7 @@ export async function POST(req: NextRequest) {
       message
     );
 
-    // 7. Appeler OpenRouter
+    // 8. Appeler OpenRouter
     let aiResponse: ParsedAIResponse;
     let provider = 'openrouter';
     let warnings: string[] = [];
@@ -341,11 +518,23 @@ export async function POST(req: NextRequest) {
     } catch (openRouterError: any) {
       console.error('❌ Erreur lors de l\'appel à OpenRouter:', openRouterError);
 
+      // Message d'erreur personnalisé selon le type d'erreur
+      let errorContent = 'Le service de diagnostic IA est temporairement indisponible. Veuillez réessayer plus tard.';
+      let warningType = 'OPENROUTER_UNAVAILABLE';
+      
+      if (openRouterError?.message === 'RATE_LIMIT') {
+        errorContent = 'Le service de diagnostic IA a atteint sa limite de requêtes. Veuillez patienter quelques instants et réessayer. Les modèles gratuits ont des limites de taux pour éviter les abus.';
+        warningType = 'RATE_LIMIT';
+      } else if (openRouterError?.message?.includes('OPENROUTER_AUTH')) {
+        errorContent = 'Erreur d\'authentification avec le service IA. Veuillez contacter le support technique.';
+        warningType = 'AUTH_ERROR';
+      }
+
       const errorMessage = {
         id: `temp-${Date.now()}`,
         conversation_id: conversationIdToUse,
         role: 'assistant' as const,
-        content: 'Le service de diagnostic IA est temporairement indisponible. Veuillez réessayer plus tard.',
+        content: errorContent,
         created_at: new Date().toISOString(),
         ai_analysis: {
           error_details: {
@@ -365,7 +554,7 @@ export async function POST(req: NextRequest) {
         userMessage: savedUserMessage,
         analysis: errorMessage.ai_analysis,
         suggestedQuestions: [],
-        warnings: ['OPENROUTER_UNAVAILABLE'],
+        warnings: [warningType],
         error_details: errorMessage.ai_analysis.error_details,
       });
     }

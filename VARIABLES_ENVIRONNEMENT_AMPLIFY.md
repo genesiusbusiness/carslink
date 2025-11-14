@@ -31,6 +31,32 @@ Ce document liste **TOUTES** les variables d'environnement à configurer dans AW
 - **Exemple** : `https://yxkbvhymsvasknslhpsa.supabase.co`
 - **Sécurité** : ✅ **PUBLIQUE** - Peut être exposée (utilisée côté client)
 
+### 4. **EBAY_APP_ID** (OBLIGATOIRE pour Marketplace)
+- **Description** : App ID (Client ID) de votre application eBay Developer
+- **Où la trouver** : [eBay Developer Portal](https://developer.ebay.com/) → My Account → Keys & Tokens
+- **Format** : Alphanumeric string
+- **Exemple** : `YourAppId-Prod-1234-5678-90ab-cdef`
+- **Sécurité** : ⚠️ **SECRET** - Ne jamais exposer publiquement
+
+### 5. **EBAY_CLIENT_SECRET** (OBLIGATOIRE pour Marketplace)
+- **Description** : Client Secret de votre application eBay Developer
+- **Où la trouver** : [eBay Developer Portal](https://developer.ebay.com/) → My Account → Keys & Tokens
+- **Format** : Alphanumeric string
+- **Exemple** : `Prod-1234-5678-90ab-cdef-ghij-klmn`
+- **Sécurité** : ⚠️ **TRÈS SECRET** - Ne jamais exposer publiquement
+
+### 6. **EBAY_DEV_ID** (OPTIONNEL)
+- **Description** : Developer ID eBay (optionnel pour certaines APIs)
+- **Où la trouver** : [eBay Developer Portal](https://developer.ebay.com/) → My Account → Keys & Tokens
+- **Format** : Alphanumeric string
+- **Sécurité** : ⚠️ **SECRET** - Ne jamais exposer publiquement
+
+### 7. **EBAY_ENVIRONMENT** (OPTIONNEL, défaut: sandbox)
+- **Description** : Environnement eBay à utiliser (sandbox ou production)
+- **Valeurs possibles** : `sandbox` ou `production`
+- **Défaut** : `sandbox`
+- **Sécurité** : ✅ **PUBLIQUE** - Peut être exposée
+
 ---
 
 ## 🚀 Configuration dans AWS Amplify
@@ -50,6 +76,10 @@ Pour chaque variable, cliquez sur **"Add variable"** et remplissez :
 | `OPENROUTER_API_KEY` | `sk-or-v1-...` | **Secret** |
 | `SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` | **Secret** |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://yxkbvhymsvasknslhpsa.supabase.co` | **Plain text** |
+| `EBAY_APP_ID` | `YourAppId-Prod-...` | **Secret** |
+| `EBAY_CLIENT_SECRET` | `Prod-...` | **Secret** |
+| `EBAY_DEV_ID` | `YourDevId` (optionnel) | **Secret** |
+| `EBAY_ENVIRONMENT` | `sandbox` ou `production` | **Plain text** |
 
 ### Étape 3 : Redéployer
 
@@ -84,6 +114,9 @@ Après avoir ajouté les variables :
 ### ⚠️ SECRET (NE JAMAIS dans le code)
 - `OPENROUTER_API_KEY` - Clé API privée
 - `SUPABASE_SERVICE_ROLE_KEY` - Clé admin avec accès complet
+- `EBAY_APP_ID` - Identifiant application eBay
+- `EBAY_CLIENT_SECRET` - Secret application eBay
+- `EBAY_DEV_ID` - Identifiant développeur eBay (optionnel)
 
 ---
 

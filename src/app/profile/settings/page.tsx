@@ -535,11 +535,7 @@ export default function SettingsPage() {
                     variant="ghost"
                     className="w-full justify-start h-12 hover:bg-gray-50 rounded-xl"
                     onClick={() => {
-                      toast({
-                        title: "Mentions légales",
-                        description: "Les mentions légales complètes sont disponibles sur notre site web.",
-                        variant: "default",
-                      })
+                      router.push('/mentions-legales')
                     }}
                   >
                     <div className="flex items-center gap-3">
@@ -554,11 +550,7 @@ export default function SettingsPage() {
                     variant="ghost"
                     className="w-full justify-start h-12 hover:bg-gray-50 rounded-xl"
                     onClick={() => {
-                      toast({
-                        title: "Politique de confidentialité",
-                        description: "Notre politique de confidentialité explique comment nous collectons et utilisons vos données.",
-                        variant: "default",
-                      })
+                      router.push('/politique-confidentialite')
                     }}
                   >
                     <div className="flex items-center gap-3">
@@ -573,11 +565,7 @@ export default function SettingsPage() {
                     variant="ghost"
                     className="w-full justify-start h-12 hover:bg-gray-50 rounded-xl"
                     onClick={() => {
-                      toast({
-                        title: "Conditions d'utilisation",
-                        description: "Les conditions d'utilisation régissent l'utilisation de l'application CarsLink.",
-                        variant: "default",
-                      })
+                      router.push('/conditions-utilisation')
                     }}
                   >
                     <div className="flex items-center gap-3">

@@ -1,6 +1,6 @@
 "use client"
 
-import { Home as HomeIcon, Calendar, User } from "lucide-react"
+import { Home as HomeIcon, Calendar, User, ShoppingBag } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { motion } from "framer-motion"
@@ -12,6 +12,7 @@ export function BottomNavigation() {
   const navItems = [
     { icon: HomeIcon, path: "/" },
     { icon: Calendar, path: "/appointments" },
+    { icon: ShoppingBag, path: "/marketplace" },
     { icon: User, path: "/profile" },
   ]
 
